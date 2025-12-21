@@ -62,7 +62,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import copy
 from math import floor, ceil
 
-import PAHFunctions as pahf
+import pah_codes.PAHFunctions as pahf
 
 new = np.newaxis
 
