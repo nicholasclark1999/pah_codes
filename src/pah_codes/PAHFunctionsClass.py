@@ -147,16 +147,23 @@ class DataCube:                                                                 
         '''
         
         #load in the data
-        image_file = get_pkg_data_filename(fits_file)
+        with fits.open(fits_file) as hdul:
+            header = hdul[1].header
+            instrument_header = hdul[0].header
+
+            data = hdul[1].data
+            # error_data = hdul[2].data
+
+        #image_file = get_pkg_data_filename(fits_file)
         
         #header data
-        header = fits.getheader(image_file, 1)
+        #header = fits.getheader(image_file, 1)
         
         # instrument header
-        instrument_header = fits.getheader(image_file, 0)
+        #instrument_header = fits.getheader(image_file, 0)
         
         #extracting image data
-        data = fits.getdata(image_file, ext=1)
+        #data = fits.getdata(image_file, ext=1)
         #error_data = fits.getdata(image_file, ext=2)
         original_data = np.copy(data)
         
