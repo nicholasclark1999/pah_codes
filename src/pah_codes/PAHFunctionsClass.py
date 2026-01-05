@@ -1051,42 +1051,4 @@ class DataCube:
            print('oops') # pass
     
     
-    
-    def png_combine(self, directory_loc, pdf_name, reso=100): #XXX move to regular functions, add possibility to not delete folder contents?
-        """
-        Regrids data cube. Can specify starting indices to ensure for example that a 2x2 central source
-        becomes 1 pixel and not a quarter of 4 pixels.
-
-        Parameters
-        ----------
-        directory_loc : string
-            directory containing pngs to combine.
-        pdf_name : string
-            name and file loc of combined pdf.
-        reso : int
-            resolution in dpi of the pdf.
-        """   
-        directory = listdir(directory_loc)
-        pngs = []
-        for file in directory:
-            if '.png' in file:
-                pngs.append(directory_loc + file)
-        
-        
-        images = [Image.open(file) for file in pngs]
-            
-        alpha_removed = []
-            
-        for i in range(len(images)):
-            images[i].load()
-            background = Image.new("RGB", images[i].size, (255, 255, 255))
-            background.paste(images[i], mask=images[i].split()[3]) # 3 is the alpha channel
-            alpha_removed.append(background)
-        
-        alpha_removed[0].save(
-            pdf_name, "PDF" ,resolution=reso, save_all=True, append_images=alpha_removed[1:]
-        )
-        
-        for file in pngs:
-            os.remove(file)
   
