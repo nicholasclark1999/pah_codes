@@ -72,15 +72,15 @@ TO DO
 
 # TODO
 
-# make sure everything is indexed as data[:,y,x]
+# move png_combine to regular functiosn 
+
+# rename static methods to initiate like in psf matching code
+
+# make error array a dictionary like integrals
+
 # rename the 'flux aligner' functions 
 
-# set up these functions to work as class nocules per subchannel, maybe also
-# a seperate stitched class?
-
 # use pickle for saving classes
-
-# fix nan replacer or remove it if not needed
 
 
 
@@ -94,7 +94,31 @@ FUNCTIONS
 
 
 
-class DataCube:                                                                  # XXXabything here
+class DataCube:
+    """
+    Dedicated class for PAH analysis
+
+    Parameters
+    ----------
+    fits_file : string
+        The local file location of the fits file the data cube.
+    wavelengths : numpy.ndarray
+        wavelength array ascociated with spectrum, implicit units of microns.
+    original_data : numpy.ndarray
+        The values of the spectrum, in JWST index format (wavelength first), not modified.
+    data : numpy.ndarray
+        The values of the spectrum, in JWST index format (wavelength first), can have emission lines removed.
+    header : dict
+        ext 1 JWST header.
+    instrument_header : dict
+        ext 0 JWST header.
+    shape : tuple of ints
+        the y and x length corresponding to data, in the JWST format (w,y,x).
+    overlap : list of ints
+        overlap array populated whenever data stitching occurs.
+    fov_mask : numpy.ndarray
+        2d array specifying what indices to consider for.
+    """
     
     def __init__(self,
                  fits_file,
@@ -120,31 +144,20 @@ class DataCube:                                                                 
         
         
     @staticmethod
-    def loading_function(fits_file): # removed header_index
-        '''
-        This function loads in JWST MIRI and NIRSPEC fits data cubes, and extracts wavelength 
-        data from the header and builds the corresponding wavelength array.
-        
+    def loading_function(fits_file): #XXX rename to initiate?
+        """
+        Static method used to generate a DataCube object from a fits file.
+
         Parameters
         ----------
-        fits_file
-            TYPE: string
-            DESCRIPTION: where the fits file is located.
-    
+        fits_file : string
+            The local file location of the fits file of the data cube.
+
         Returns
         -------
-        wavelengths
-            TYPE: 1d numpy array of floats
-            DESCRIPTION: the wavelength array in microns.
-        data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data.
-                for [k,i,j] k is wavelength index, i and j are position index.
-        error_data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral error data.
-                    for [k,i,j] k is wavelength index, i and j are position index.
-        '''
+        DataCube : DataCube
+            An instance of the DataCube object.
+        """
         
         #load in the data
         with fits.open(fits_file) as hdul:
@@ -152,19 +165,7 @@ class DataCube:                                                                 
             instrument_header = hdul[0].header
 
             data = hdul[1].data
-            # error_data = hdul[2].data
 
-        #image_file = get_pkg_data_filename(fits_file)
-        
-        #header data
-        #header = fits.getheader(image_file, 1)
-        
-        # instrument header
-        #instrument_header = fits.getheader(image_file, 0)
-        
-        #extracting image data
-        #data = fits.getdata(image_file, ext=1)
-        #error_data = fits.getdata(image_file, ext=2)
         original_data = np.copy(data)
         
         
@@ -172,18 +173,9 @@ class DataCube:                                                                 
         number_wavelengths = header["NAXIS3"]
         wavelength_increment = header["CDELT3"]
         wavelength_start = header["CRVAL3"]
+        ref_pix = header['CRPIX3'] # reference pixel value, usually 1
         
-        #constructing the ending point using given data
-        #subtracting 1 so wavelength array is the right size.
-        wavelength_end = wavelength_start + (number_wavelengths - 1)*wavelength_increment
-    
-        #making wavelength array, in micrometers
-        wavelengths = np.arange(wavelength_start, wavelength_end, wavelength_increment)
-        
-        #sometimes wavelength array is 1 element short, this will fix that
-        if len(wavelengths) != len(data):
-            wavelength_end = wavelength_start + number_wavelengths*wavelength_increment
-            wavelengths = np.arange(wavelength_start, wavelength_end, wavelength_increment)
+        wavelengths = (np.arange(number_wavelengths) + ref_pix - 1) * wavelength_increment + wavelength_start
             
         # determining shape from number of dimensions  
         shape = data.shape
@@ -212,16 +204,28 @@ class DataCube:                                                                 
     
     @staticmethod
     def loading_function_txt(fits_file): 
-        
-        # works to load in greg's 1d spectra, that contain wavelengths, flux, errors, and segment
-        
+        """
+        Static method used to generate a DataCube object from a txt file, intended for greg's 1d spectra 
+        that contain wavelengths, flux, errors and segment number.
+
+        Parameters
+        ----------
+        fits_file : string
+            The local file location of the txt file of the data spectra.
+
+        Returns
+        -------
+        DataCube : DataCube
+            An instance of the DataCube object.
+        """
+
         #load in the data
         image_file = np.loadtxt(fits_file, unpack=True)
         
-        #header data
+        #header data, unused here
         header = 'unused'
         
-        # instrument header
+        # instrument header, unused here
         instrument_header = 'unused'
         
         #extracting image data
@@ -246,83 +250,27 @@ class DataCube:                                                                 
         #standardized shape
         shape = np.array([array_y, array_x])
         
-        # defining overlap list for if stitching occurs
+        # defining overlap list for if stitching occurs, unused here
         overlap = 'unused'
         
-        # determining where fov is based on NaNs
+        # determining where fov is based on NaNs, unused here
         fov_mask = 'unused'
         
         return DataCube(fits_file, wavelengths, original_data, data, header, instrument_header, shape, overlap, fov_mask)
-    
-
-
-    def nan_replacer_old(self, nirspec=False):                       # XXX update docstring
-        '''
-        iterates through data, and replaces any nan values with the value preceding it
         
+        
+        
+    def nan_replacer(self, nirspec=False):
+        """
+        replaces the nans of a datacube, while leaving the edge nans intact. Nans are replaced with the 
+        data that comes immediately before, assuming that data with a large gap of nans in the data has 
+        other issues as well.
+
         Parameters
         ----------
-        wavelengths
-            TYPE: 1d numpy array of floats
-            DESCRIPTION: the wavelength array in microns, data_a and data_b joined 
-                together as described above.
-        data
-            TYPE: 1d array of floats
-            DESCRIPTION: a spectra, with the line to be removed.
-    
-        Returns
-        -------
-        new_data 
-            TYPE: 1d array of floats
-            DESCRIPTION: spectra with NaNs replaced
-        '''
-        
-        data = np.copy(self.data)
-        
-        N = len(data[:,0,0])
-        
-        if nirspec == True:
-            # set a gap in the middle of the band to 0 instead of previous
-            for i in range(1690, 2010):
-                where_are_nans = np.isnan(data[i]) 
-                data[i][where_are_nans] = 0
-                
-            for i in range(1, N):
-                for y, x in ((y, x) for y in range(self.shape[0]) for x in range(self.shape[1])):
-                    if where_are_nans[y,x] == True:
-                        data[i,y,x] = data[i-1,y,x]
-
-        else:
-            for i in range(1, N):
-                where_are_nans = np.isnan(data[i]) 
-                for y, x in ((y, x) for y in range(self.shape[0]) for x in range(self.shape[1])):
-                    if where_are_nans[y,x] == True:
-                        data[i,y,x] = data[i-1,y,x]
-        
-        self.data = data
-        
-        
-        
-    def nan_replacer(self, nirspec=False):                       # XXX update docstring
-        '''
-        iterates through data, and replaces any nan values with the value preceding it
-        
-        Parameters
-        ----------
-        wavelengths
-            TYPE: 1d numpy array of floats
-            DESCRIPTION: the wavelength array in microns, data_a and data_b joined 
-                together as described above.
-        data
-            TYPE: 1d array of floats
-            DESCRIPTION: a spectra, with the line to be removed.
-    
-        Returns
-        -------
-        new_data 
-            TYPE: 1d array of floats
-            DESCRIPTION: spectra with NaNs replaced
-        '''
+        nirspec : bool
+            Nirspec spectra have a gap, so a range of indices are ignored where the gap occurs.
+        """
         
         data = np.copy(self.data)
         
@@ -351,36 +299,23 @@ class DataCube:                                                                 
 
 
     
-    def emission_line_remover(self, wave_list, special=None, cont_mode=False):  
-        '''
+    def emission_line_remover(self, wave_list, special=None, cont_mode=False):
+        """
         removes a single emission line occupying a specified wavelength range, by 
         replacing the line with a linear function. The slope is calculated by 
-        using points below the blue end and above the red end.
-        
+        using points below the blue end and above the red end. Creates local_cont argument.
+
         Parameters
         ----------
-        wavelengths
-            TYPE: 1d numpy array of floats
-            DESCRIPTION: the wavelength array in microns, data_a and data_b joined 
-                together as described above.
-        data
-            TYPE: 1d array of floats
-            DESCRIPTION: a spectra, with the line to be removed.
-            wave_list
-                TYPE: list of floats
-                DESCRIPTION: the wavelengths in microns, corresponding to the 
-                    beginning and ending of the line to be removed
-        special
-            TYPE: kwarg nonetype
-            DESCRIPTION: making this not none will trigger non-median slope calculation 
-                for troublesome lines
-    
-        Returns
-        -------
-        new_data 
-            TYPE: 1d array of floats
-            DESCRIPTION: spectra with emission line removed.
-        '''
+        wave_list : numpy.ndarray
+            Nx2 array, specifying the beginning and end of each emission line.
+        special : NoneType
+            if not none, uses the specified flux value of the wavelength instead of a median. Intended for 
+            tricky regions with dense lines.
+        cont_mode : bool
+            reusing the emission line code for building a local continuum instead of an emission line, subtracts
+            spline continuum from the data at the same time.
+        """
         
         wavelengths = self.wavelengths
         if cont_mode == False:
@@ -409,7 +344,6 @@ class DataCube:                                                                 
         for i in range(len(wavelengths)):
             wavelengths_cube[i] = wavelengths[i]
         
-
         for i in range(N):
             # short form wavelength indices    
             w1 = temp_index_1[i]
@@ -457,6 +391,24 @@ class DataCube:                                                                 
         
         
     def mbb_continuum(self, bb, bb_check, temp, amp, gamma):
+        """
+        generates a modified blackbody and performs a grid search to determing the best fit via least squares.
+        Considers temperature and amplitude as seperate parameters to be specified, and allows for 
+        check arrays where the mbb must not be greater than the data.
+
+        Parameters
+        ----------
+        bb : numpy.ndarray
+            array specifying the beginning and ending wavelengths of the flux that is averaged over for fitting.
+        bb_check : numpy.ndarray
+            beginning and ending wavelengths of the flux that is averaged over for verifying the fit stays less than the flux.
+        temp : numpy.ndarray
+            array of temperatures in kelvin to be considered.
+        amp : numpy.ndarray
+            array of amplitudes to consider, carry the units of the output data.
+        gamma : float
+            exponent in mbb controlling dust particle size distribution.
+        """
         
         wavelengths = self.wavelengths
         data = self.data
@@ -491,42 +443,38 @@ class DataCube:                                                                 
         mbb = pahf.modified_planck_wl(wavecube, tempcube, ampcube, gamma)
         mbb_check = pahf.modified_planck_wl(wavecube_check, tempcube_check, ampcube_check, gamma)
 
-        # chi squared test, and staying positive check
+        # least squares test, and staying positive check
         meancube = pahf.mean_from_wave(data, wavelengths, shape, bb)
         meancube_check = pahf.mean_from_wave(data, wavelengths, shape, bb_check)
 
         # need to combine objects of  (case, wave, T, A) and (case, wave, y, x)
-        # note: chi_squared should divide by sigma squared but im using mbb instead due to not having errors
-        # chi_squared = np.nansum(((mbb[:, :, new, new, :, :] - meancube[:, :, :, :, new, new])**2)/(mbb[:, :, new, new, :, :])**2, axis=1)
-        chi_squared = np.nansum(((mbb[:, :, new, new, :, :] - meancube[:, :, :, :, new, new])**2), axis=1)
+        least_squares = np.nansum(((mbb[:, :, new, new, :, :] - meancube[:, :, :, :, new, new])**2), axis=1)
 
-        # need case axis to match chi_squared
+        # need case shape to match least_squares shape
         check = meancube_check[0, :, :, :, new, new] - mbb_check[0, :, new, new, :, :]
         check = np.ones((size_case, size_wave_check, shape[0], shape[1], size_T, size_A))*check[new, :, :, :, :, :]
 
         # applying check, removing fits that go negative when they should be positive
         for i in range(size_wave_check):
-            chi_squared[check[:, i, :, :, :, :] < 0] = 1e10
+            least_squares[check[:, i, :, :, :, :] < 0] = 1e10
 
         # finding best fit T and amp (dims 3 and 4)
-        minT_chi = np.min(chi_squared, axis=3)
-        minA = np.argmin(minT_chi, axis=3)
+        minT_ls = np.min(least_squares, axis=3)
+        minA = np.argmin(minT_ls, axis=3)
 
-        minA_chi = np.min(chi_squared, axis=4)
-        minT = np.argmin(minA_chi, axis=3)
+        minA_ls = np.min(least_squares, axis=4)
+        minT = np.argmin(minA_ls, axis=3)
 
-        min_chi_squared_all_case = np.ones((size_case, shape[0], shape[1]))
+        min_least_squares_all_case = np.ones((size_case, shape[0], shape[1]))
         optimal_vals_all_case = np.ones((size_case, shape[0], shape[1], 2))
         for i,j,k in ((i,j,k) for i in range(size_case) for j in range(shape[0]) for k in range(shape[1])): # this is a loop through a generator expression
             a = minT[i, j, k]
             b = minA[i, j, k]
-            min_chi_squared_all_case[i, j, k] = chi_squared[i, j, k, a, b] 
+            min_least_squares_all_case[i, j, k] = least_squares[i, j, k, a, b] 
             optimal_vals_all_case[i, j, k, 0] = temp[a]
             optimal_vals_all_case[i, j, k, 1] = amp[b]
 
-        # chi_plotter(i, chi_squared, chi_squared2, minA, minT, minA2, minT2)
-
-        case_to_use = np.argmin(min_chi_squared_all_case, axis=0)
+        case_to_use = np.argmin(min_least_squares_all_case, axis=0)
 
         best_mbb = np.ones((len(wavelengths), shape[0], shape[1]))
         best_wavecube = np.ones((size_wave, shape[0], shape[1]))
@@ -550,6 +498,17 @@ class DataCube:                                                                 
         
         
     def spline_continuum(self, anchor_point_ipac, all_cont=False):
+        """
+        wrapper function for the spline continuum code.
+
+        Parameters
+        ----------
+        anchor_point_ipac : string
+            file location of the ipac table containing the anchor points.
+       all_cont : boolean 
+           for if mbb, spline, and linear continuum are being ran in succession.
+        """
+        
         wavelengths = self.wavelengths
         data = np.copy(self.data)
         
@@ -561,10 +520,20 @@ class DataCube:                                                                 
         self.anchor_points = anchor_point_ipac
             
 
-
     
-    def linear_continuum(self, wave_list, tight=None, all_cont=False): # XXX need docstring
-                             
+    def linear_continuum(self, wave_list, tight=None, all_cont=False):
+        """
+        calculates a series of connected linear functions meant to serve as local continua under well-behaved fatures.
+
+        Parameters
+        ----------
+        wave_list : numpy.ndarray
+            array specifying the wavelengths of the fluxes to be used for constructing the linear functions.
+        tight : NoneType
+            uses less values in median calculation for when there are small amounts of continuum available.
+       all_cont : boolean 
+           for if mbb, spline, and linear continuum are being ran in succession.
+        """
         wavelengths = self.wavelengths
 
         if all_cont == True:
@@ -632,12 +601,16 @@ class DataCube:                                                                 
                 
         self.linear_cont = continuum
         
+        
+        
     def all_continuum(self, 
                       bb, bb_check, temp, amp, gamma,
                       anchor_point_ipac, 
                       wave_list, tight=None):
-        
-        # wrapper function
+        """
+       wrapper function that runs mbb, spline and linear cont in succession using their inputs.
+        """
+
         self.mbb_continuum(bb, bb_check, temp, amp, gamma)
         self.spline_continuum(anchor_point_ipac, all_cont=True)
         self.linear_continuum(wave_list, tight, all_cont=True)
@@ -650,8 +623,27 @@ class DataCube:                                                                 
             feature_extent, 
             unit='MJy', feature_name=None,
             no_neg=False
-            ):                                    # XXX need docstring
-    
+            ):          
+        """
+        converts units and then integrates a feature over the specified wavelength range.
+
+        Parameters
+        ----------
+        feature_extent : tuple of floats
+            beginning and ending wavelengths to be integrated over.
+        unit : string
+            unit of data that needs to be converted (not sr.) assumed to be MJy or Jy as options.
+       feature_name : NoneType
+           name of the feature being integrated, for if multiple are considered in succession.
+         no neg : bool
+             negative intensities are assumed to be zero and set accordingly.
+           
+        Returns
+        -------
+        integral : dict
+            A dictionary containing an ndarray as the val, and theeee feature name as the key.
+        """                          
+        
         # retrieving relevant wavelength range
         feature_start =  np.argmin(abs(self.wavelengths - feature_extent[0]))
         feature_end = np.argmin(abs(self.wavelengths - feature_extent[1]))
@@ -692,7 +684,20 @@ class DataCube:                                                                 
 
 
     
-    def CalculateR(self, wavelength):                                                    # XXX need docstring, does nirspec exist? yes it does also on pahfit
+    def CalculateR(self, wavelength):
+        """
+        calculates the resolution of MIRI MRS based on the specified wavelength
+
+        Parameters
+        ----------
+        wavelength : float
+            wavelength R is calculated for.
+            
+        Returns
+        -------
+        R : float
+            the calculated resolution corresponding to the wavelength.
+        """     
         
         # 1A
         if 4.9 <= wavelength <= 5.74:
@@ -733,13 +738,28 @@ class DataCube:                                                                 
                     
         R = coeff[0] + coeff[1]*wavelength + coeff[2]*wavelength**2
             
-        return(R)
+        return R
 
     
     
-    def error_finder(self, feature_wavelength, feature_extent, error_wave): # XXX need docstring
-        #calculates error of assosiated integrals
-        
+    def error_finder(self, feature_wavelength, feature_extent, error_wave):
+        """
+        calculates the error of assosiated integrals, based on their RMS.
+
+        Parameters
+        ----------
+        feature_wavelength : float
+            main wavelength assosiated with the integrated feature, used for the resolution calculation.
+        feature_extent : tuple of floats
+            beginning and ending wavelengths to be integrated over.
+       error_wave : float
+           wavelength to be used for the RMS calculation, assumed to correspond to continuum.
+           
+        Returns
+        -------
+        error : numpy.ndarray
+            error array corresponding to the intensity with matching units.
+        """     
         error_index = np.argmin(abs(self.wavelengths - error_wave))
         
         wavelengths = self.wavelengths[error_index - 25 : error_index + 25]
@@ -751,31 +771,25 @@ class DataCube:                                                                 
         jy_cube = (data*10**6)*(u.Jy/u.sr)
 
         # need to convert units one spectra at a time
-        for i in range(array_y):
-            for j in range(array_x):
-                si_cube[:,i,j] = jy_cube[:,i,j].to(u.W/((u.m**2)*u.micron*u.sr), equivalencies =\
+        for i, j in ((i, j) for i in range(array_y) for j in range(array_x)):
+            si_cube[:,i,j] = jy_cube[:,i,j].to(u.W/((u.m**2)*u.micron*u.sr), equivalencies =\
                                                 u.spectral_density(wavelengths*u.micron))
-        
-        # performing numerical integration
+
         rms_data = si_cube.value
     
-        # calculating RMS    
+        # calculating RMS, turning into error
         rms = (np.var(rms_data, axis=0))**0.5
-        
         resolution = self.CalculateR(feature_wavelength)
-        
         delta_wave = feature_wavelength/resolution
-        
         num_points = (feature_extent[1] - feature_extent[0])/delta_wave
-        
         error = rms*delta_wave*(num_points)**0.5
         
         return error
     
 
     
-    def spectra_stitcher(self, DataCube2, offset=None, no_offset=False, nirspec_to_miri=False): # XXX update docstring
-        '''
+    def spectra_stitcher(self, DataCube2, offset=None, no_offset=False, nirspec_to_miri=False):
+        """
         This function takes in 2 adjacent wavelength and image data arrays, presumably 
         from the same part of the image fov (field of view), so they correspond to 
         the same location in the sky. It then finds which indices in the lower wavelength 
@@ -784,45 +798,18 @@ class DataCube:                                                                 
         
         It needs to work with arrays that may have different intervals, so it is split into 2
         to take a longer running but more careful approach if needed.
-        
-        Note that in the latter case, the joining is not perfect, and currently a gap
-        of ~0.005 microns is present; this is much better than the previous gap of ~0.05 microns,
-        as 0.005 microns corresponds to 2-3 indices.
-        
+
         Parameters
         ----------
-        wave_a
-            TYPE: 1d array of floats
-            DESCRIPTION: wavelength array in microns, contains the smaller wavelengths.
-        wave_b
-            TYPE: 1d array of floats
-            DESCRIPTION: wavelength array in microns, contains the larger wavelengths.
-        data_a
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data corresponding to wave_a.
-                for [k,i,j] k is wavelength index, i and j are position index.
-        data_b
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data corresponding to wave_b.
-                for [k,i,j] k is wavelength index, i and j are position index.
-                
-        Returns
-        -------
-        data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data, data_a and data_b joined together as described above.
-                for [k,i,j] k is wavelength index, i and j are position index.
-        wavelengths
-            TYPE: 1d numpy array of floats
-            DESCRIPTION: the wavelength array in microns, data_a and data_b joined together as described above.
-        offset
-            TYPE: float
-            DESCRIPTION: offset applied to data
-        overlap
-            TYPE: tuple of indices
-            DESCRIPTION: the index of the lower and upper array where the stitching occurs.
-            
-        '''
+        DataCube2 : DataCube
+            instance to be stitched into self DataCube.
+        offset : NoneType
+            uses specified offset instead of calculating one.
+        no_offset : bool
+            no offsets applied when True.
+        nirspec_to_miri : bool
+            additional considerations when stitching nirspec and miri spectra together.
+        """    
         
         wave_a = self.wavelengths
         wave_b = DataCube2.wavelengths
@@ -931,6 +918,18 @@ class DataCube:                                                                 
         
 
     def rand_index_gen(self, N, mask=None):
+        """
+        generates N random indices to use for plotting, without repeats.
+
+        Parameters
+        ----------
+        N : int
+            How many random indices to calculate. Since repeats are avoided, N should be larger than
+            the number of possible indices to prevent infinite loops.
+        mask : NoneType
+            when an array is specified as a mask, random indices will need to be in the mask region to be counted.
+        """    
+        
         if mask is None:
             mask = self.fov_mask
             
@@ -957,8 +956,20 @@ class DataCube:                                                                 
             
 
     
-    # used to be extract_spectra_from_regions_one_pointing_no_bkg
-    def region_to_mask(self, region_file):                            # docstring, standardize names
+    def region_to_mask(self, region_file):
+        """
+        converts region files generated in ds9 to numpy arrays.
+
+        Parameters
+        ----------
+        region_file : string
+            file location of the region file.
+           
+        Returns
+        -------
+        regmask : numpy.ndarray
+            array corresponding to region. 1 inside, and 0 outside region.
+        """     
 
         reg = regions.Regions.read(region_file, format='ds9')
         fits_cube = fits.open(self.fits_file)
@@ -970,34 +981,20 @@ class DataCube:                                                                 
     
     
     
-    def regrid(self, N, x_start=0, y_start=0): # XXX redo docstring
-        '''
-        This function regrids a data cube, such that its pixel size goes from 1x1 to NxN, where N is specified.
-        This is done by taking a weighted mean. Note that if the size of the array is not
-        divisible by N, the indices at the end are discarded. 
-        This should be ok since edge pixels are usually ignored.
-        
+    def regrid(self, N, x_start=0, y_start=0):
+        """
+        Regrids data cube. Can specify starting indices to ensure for example that a 2x2 central source
+        becomes 1 pixel and not a quarter of 4 pixels.
+
         Parameters
         ----------
-        data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data cube to be rebinned.
-                for [wave, y, x] wave is wavelength index, x and y are position index.
-        rms
-            TYPE: 2d array of floats
-            DESCRIPTION: RMS values corresponding to area near where weighted mean is found, for each spacial pixel
-        N
-            TYPE: positive integer
-            DESCRIPTION: the value N such that the number of pixels that go into the new pixel are N^2,
-                i.e. before eacch pixel is 1x1, after its NxN per pixel.
-    
-        Returns
-        -------
-        rebinned_data
-            TYPE: 3d array of floats
-            DESCRIPTION: new data, on a smaller grid size in the positional dimensions.
-        '''
-        
+        N : int
+            size of square to regrid to, ex 2x2.
+        x_start : int
+            first x index to use in regridding.
+        y_start : int
+            first y index to use in regridding.
+        """     
         data = self.data
         original_data = self.original_data
         
@@ -1055,8 +1052,20 @@ class DataCube:                                                                 
     
     
     
-    def png_combine(self, directory_loc, pdf_name, reso=100):
-        
+    def png_combine(self, directory_loc, pdf_name, reso=100): #XXX move to regular functions, add possibility to not delete folder contents?
+        """
+        Regrids data cube. Can specify starting indices to ensure for example that a 2x2 central source
+        becomes 1 pixel and not a quarter of 4 pixels.
+
+        Parameters
+        ----------
+        directory_loc : string
+            directory containing pngs to combine.
+        pdf_name : string
+            name and file loc of combined pdf.
+        reso : int
+            resolution in dpi of the pdf.
+        """   
         directory = listdir(directory_loc)
         pngs = []
         for file in directory:
@@ -1080,183 +1089,4 @@ class DataCube:                                                                 
         
         for file in pngs:
             os.remove(file)
-            
-        
-
-
-    '''
-    below functions are not tested
-    '''
-
-
-    
-    def weighted_mean_finder_rms(self, error_index):
-        '''
-        This function takes a weighted mean of the (assumed background-subtracted, 
-        in the case of JWST cubes) data, for 3 dimensional arrays.
-        The mean is taken over the 1st and 2nd indicies (not the 0th), i.e. the spacial dimensions.
-        For the weights, the RMS of the nearby continua is used.
-        
-        Parameters
-        ----------
-        data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data.
-                for [wave, y, x] wave is wavelength index, x and y are position index.
-        rms
-            TYPE: 2d array of floats
-            DESCRIPTION: RMS values corresponding to area near where weighted mean is found, for each spacial pixel
-        
-        Returns
-        -------
-        weighted_mean
-            TYPE: 1d array of floats
-            DESCRIPTION: weighted mean of the background-subtracted input data 
-                spacial dimensions, as a spectra.
-        '''
-        
-        data = self.data
-        
-        #replacing nans with 0, as data has nans on border
-        where_are_NaNs = np.isnan(data) 
-        data[where_are_NaNs] = 0
-        
-        #weighted mean array
-        weighted_mean_temp = np.copy(data)
-        
-        # calculating RMS    
-        rms_data = data[error_index-25:error_index+25]
-        rms = (np.var(rms_data))**0.5
-        
-        #big rms means noisy data so use the inverse as weights
-        weights = 1/rms
-        
-        # weights equal to 1.0 are set to 0
-        for y in range(len(data[0,:,0])):
-            for x in range(len(data[0,0,:])):
-                if weights[y,x] == 1.0:
-                    weights[y,x] = 0
-        
-        for y in range(len(data[0,:,0])):
-            for x in range(len(data[0,0,:])):
-                #adding single components of weighted mean to lists, to sum later
-                weighted_mean_temp[:,y,x] = (weights[y,x])*(data[:, y, x])
-    
-        #summing to get error and weighted mean for this wavelength
-        weighted_mean = (np.sum(weighted_mean_temp, axis=(1,2)))/(np.sum(weights))
-        
-        # new class to store weighted mean
-        DataCubeWeighted = copy(DataCube)      
-        DataCubeWeighted.original_data = weighted_mean                           # XXX does this copy classes
-        DataCubeWeighted.data = weighted_mean
-        
-        return DataCubeWeighted
-    
-    
-    
-    def weighted_mean_finder_rms_template(self, error_index, y_points, x_points):
-        '''
-        This function takes a weighted mean of the (assumed background-subtracted, 
-        in the case of JWST cubes) data, for 3 dimensional arrays.
-        The mean is taken over lists of provided spacial indices
-        For the weights, the RMS of the nearby continua is used.
-        
-        Parameters
-        ----------
-        data
-            TYPE: 3d array of floats
-            DESCRIPTION: position and spectral data.
-                for [wave, y, x] wave is wavelength index, x and y are position index.
-        rms
-            TYPE: 2d array of floats
-            DESCRIPTION: RMS values corresponding to area near where weighted mean is found, for each spacial pixel
-        
-        Returns
-        -------
-        weighted_mean
-            TYPE: 1d array of floats
-            DESCRIPTION: weighted mean of the background-subtracted input data 
-                spacial dimensions, as a spectra.
-        '''
-        
-        data = self.data
-        
-        #replacing nans with 0, as data has nans on border
-        where_are_NaNs = np.isnan(data) 
-        data[where_are_NaNs] = 0
-        
-        #weighted mean array
-        weighted_mean_temp = np.copy(data)
-        
-        # calculating RMS    
-        rms_data = data[error_index-25:error_index+25]
-        rms = (np.var(rms_data))**0.5
-        
-        #big rms means noisy data so use the inverse as weights
-        weights = 1/rms
-        
-        # weights equal to 1.0 are set to 0
-        for y in range(len(data[0,:,0])):
-            for x in range(len(data[0,0,:])):
-                if weights[y,x] == 1.0:
-                    weights[y,x] = 0
-        
-        # setting all weights not specified by the points to 0
-        
-        weights_temp = np.zeros(rms.shape)
-        for i in range(len(y_points)):
-            weights_temp[y_points[i], x_points[i]] = 1
-        
-        for y in range(len(data[0,:,0])):
-            for x in range(len(data[0,0,:])):
-                if weights_temp[y,x] == 0:
-                    weights[y,x] = 0
-        
-        #weighted mean array
-        weighted_mean_temp = np.copy(data)
-    
-        for y in range(len(data[0,:,0])):
-            for x in range(len(data[0,0,:])):
-                #adding single components of weighted mean to lists, to sum later
-                weighted_mean_temp[:,y,x] = (weights[y,x])*(data[:, y, x])
-    
-        
-        #all values not in list have rms to 0 and therefore dont contribute
-    
-        #summing to get error and weighted mean for this wavelength
-        weighted_mean = (np.sum(weighted_mean_temp, axis=(1,2)))/(np.sum(weights))
-        
-        # new class to store weighted mean
-        DataCubeWeighted = copy(DataCube)      
-        DataCubeWeighted.original_data = weighted_mean                           # XXX does this copy classes
-        DataCubeWeighted.data = weighted_mean
-        
-        return DataCubeWeighted
-    
-    
-    
-    def regrid_undoer(list_x, list_y):
-        index = len(list_x)
-        
-        new_list_x = []
-        new_list_y = []
-        
-        for i in range(index):
-            new_list_x.append(2*list_x[i])
-            new_list_y.append(2*list_y[i])
-            
-            new_list_x.append(2*list_x[i] + 1)
-            new_list_y.append(2*list_y[i])
-            
-            new_list_x.append(2*list_x[i])
-            new_list_y.append(2*list_y[i] + 1)
-            
-            new_list_x.append(2*list_x[i] + 1)
-            new_list_y.append(2*list_y[i] + 1)
-
-        return new_list_x, new_list_y
-
-
-
-
-    
+  
