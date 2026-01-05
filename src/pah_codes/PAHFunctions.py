@@ -305,7 +305,7 @@ def print_time(msg, start_time=None):
 
 
   
-def png_combine(directory_loc, pdf_name, reso=100, delete=True): #XXX move to regular functions, add possibility to not delete folder contents?
+def png_combine(directory_loc, pdf_name, reso=100, delete=True):
     """
     Regrids data cube. Can specify starting indices to ensure for example that a 2x2 central source
     becomes 1 pixel and not a quarter of 4 pixels.
