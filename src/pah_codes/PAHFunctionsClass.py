@@ -286,13 +286,15 @@ class DataCube:
             for y, x in ((y, x) for y in range(self.shape[0]) for x in range(self.shape[1])):
                 if any(where_are_nans[:,y,x]) == True and where_are_nans[0,y,x] == False:
                     for i in range(1, N):
-                        data[i,y,x] = data[i-1,y,x]
+                        if where_are_nans[i,y,x] == True:
+                            data[i,y,x] = data[i-1,y,x]
 
         else:
             for y, x in ((y, x) for y in range(self.shape[0]) for x in range(self.shape[1])):
                 if any(where_are_nans[:,y,x]) == True and where_are_nans[0,y,x] == False:
                     for i in range(1, N):
-                        data[i,y,x] = data[i-1,y,x]
+                        if where_are_nans[i,y,x] == True:
+                            data[i,y,x] = data[i-1,y,x]
                         
         
         self.data = data
