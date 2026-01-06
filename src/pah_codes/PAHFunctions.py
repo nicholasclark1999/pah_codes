@@ -345,6 +345,89 @@ def png_combine(directory_loc, pdf_name, reso=100, delete=True):
     if delete==True:
         for file in pngs:
             os.remove(file)
+            
+            
+
+def linear_continuum(wavelengths, data, wave_list, tight=None):           
+    """
+    calculates a series of linear functions spanning the entire spectra, which serve as a continuum.
+    
+    Parameters
+    ----------
+    wavelengths : numpy.ndarray
+        wavelength array.
+    data : numpy.ndarray
+        spectra array. only intended to be used with 1d spectra but may work with 3d (untested).
+    wave_list : numpy.ndarray
+        array of anchor points, assumed to be in the same units as wavelength array.
+    tight : Nonetype
+        if not nonetype, does not calculate median surrounding anchor points for y values.
+        
+    Returns
+    -------
+    continuum : numpy.ndarray
+        continuum array. Same shape as data if 3d is used (untested).
+    """    
+
+    array_y, array_x = 1, 1
+    
+    # determining number of anchor points from wave_list
+    N = len(wave_list)
+    
+    temp_index = np.ones(N+2).astype(np.int64)
+    temp_index[0] = 0
+    temp_index[-1] = len(wavelengths) - 1
+    
+    for i in range(N):
+        temp_index[i+1] = np.argmin(abs(wavelengths - wave_list[i]))
+        
+    # value used in slope median
+    median_val = 15
+    if tight != None:
+        median_val = tight
+    
+    # calculating slope y vals
+    pah_slope_y_vals = np.ones((N+2, array_y, array_x))
+    
+    for i in range(N+2):
+        if i == 0:
+            pah_slope_y_vals[i] = np.median(data[temp_index[i] : temp_index[i] + median_val], axis=0)
+        elif i < N+1:
+            pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i] + median_val], axis=0)  
+        else:
+            pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i]], axis=0)
+    
+    # calculating slopes
+    pah_slope = np.ones((N+1, array_y, array_x))
+    
+    #need wavelengths[i] to have 2d shape
+    wavelengths_cube = np.ones((len(wavelengths), array_y, array_x))
+    for i in range(len(wavelengths)):
+        wavelengths_cube[i] = wavelengths[i]
+    
+    for i in range(N+1):
+        # short form wavelength indices        
+        w1 = temp_index[i]
+        w2 = temp_index[i+1]
+        pah_slope[i] = (pah_slope_y_vals[i+1] - pah_slope_y_vals[i])/\
+            (wavelengths_cube[w2] - wavelengths_cube[w1])
+                
+    # calculating continuum
+    continuum = 0*np.copy(data)
+    
+    j = 0
+    for i in range(N+1):            
+        # short form wavelength indices        
+        w1 = temp_index[i]
+        w2 = temp_index[i+1]
+        
+        while j < w2:
+            continuum[j] = pah_slope[i]*(wavelengths_cube[j] - wavelengths_cube[w1]) + pah_slope_y_vals[i]
+            j += 1
+    
+    continuum[-1] = pah_slope[-1]*(wavelengths_cube[-1] - wavelengths_cube[w1]) + pah_slope_y_vals[-2]
+            
+    return continuum
   
 
 
