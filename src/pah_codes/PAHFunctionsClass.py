@@ -643,7 +643,7 @@ class DataCube:
         Returns
         -------
         integral : dict
-            A dictionary containing an ndarray as the val, and theeee feature name as the key.
+            A dictionary containing an ndarray as the val, and the feature name as the key.
         """                          
         
         # retrieving relevant wavelength range

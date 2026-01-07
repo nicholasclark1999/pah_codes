@@ -573,14 +573,21 @@ class Anchor_points_and_splines():
                 list_for_mean = cube[anchor_indices[ind] - 20 : anchor_indices[ind] + 20, pixel[1], pixel[0]]
                 brightness_anchors[ind] = np.nanmean(list_for_mean)
             elif moments[ind] == 0 or self.bumps[ind] == "True":
-                # Find the min brightness within a wavelength region
+                # flat line over range of points, puts anchor at this value
                 wave = wavelength_anchors[ind]
                 wave_min = self.x0_mins[ind]
                 wave_max = self.x0_maxes[ind]
-                brightness_anchor, wavelength_to_change = self.find_min_brightness(wave, wave_min,
-                                                                                   wave_max, pixel)
-                brightness_anchors[ind] = brightness_anchor
-                wavelength_anchors[ind] = wavelength_to_change
+                
+                lower_ind = np.argmin(abs(self.wavelengths - wave_min))
+                upper_ind = np.argmin(abs(self.wavelengths - wave_max))
+                list_for_mean = cube[lower_ind : upper_ind, pixel[1], pixel[0]]
+                brightness_anchors[ind] = np.nanmean(list_for_mean)
+                
+                # old stuff from when it found a min over the range
+                # brightness_anchor, wavelength_to_change = self.find_min_brightness(wave, wave_min,
+                #                                                                    wave_max, pixel)
+                # brightness_anchors[ind] = brightness_anchor
+                # wavelength_anchors[ind] = wavelength_to_change
         return(brightness_anchors, wavelength_anchors)
 
 
