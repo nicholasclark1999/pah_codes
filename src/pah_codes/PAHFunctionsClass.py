@@ -660,8 +660,8 @@ class DataCube:
         if calc_max == True:
             array_length_y, array_length_x = self.shape
             # finding max index
-            max_index = np.nanargmax(data, axes=0)
-            max_val = np.nanmax(data[max_index - 10 : max_index + 10])
+            max_index = np.nanargmax(data, axis=0)
+            max_val = np.nanmax(data[max_index - 10 : max_index + 10], axis=0)
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
@@ -692,15 +692,15 @@ class DataCube:
             else:
                 self.feature_integrals[feature_name] = integral
                 
-            if calc_max == True:
-                try: 
-                    test = self.feature_max
-                            
-                except:
-                    self.feature_max = {feature_name : max_val}
-                
-                else:
-                    self.feature_max[feature_name] = max_val
+        if calc_max == True:
+            try: 
+                test = self.feature_max
+                        
+            except:
+                self.feature_max = {feature_name : max_val}
+            
+            else:
+                self.feature_max[feature_name] = max_val
          
         return integral
 
