@@ -624,7 +624,8 @@ class DataCube:
             self, 
             feature_extent, 
             unit='MJy', feature_name=None,
-            no_neg=False
+            no_neg=False,
+            calc_max=False
             ):          
         """
         converts units and then integrates a feature over the specified wavelength range.
@@ -639,6 +640,8 @@ class DataCube:
            name of the feature being integrated, for if multiple are considered in succession.
          no neg : bool
              negative intensities are assumed to be zero and set accordingly.
+         calc_max : bool
+             calculate and store the max value of the feature using the integration bounds
            
         Returns
         -------
@@ -652,6 +655,13 @@ class DataCube:
     
         wavelengths = self.wavelengths[feature_start : feature_end]
         data = (self.data - self.continuum)[feature_start : feature_end]
+        
+        # calculating max if enabled
+        if calc_max == True:
+            array_length_y, array_length_x = self.shape
+            # finding max index
+            max_index = np.nanargmax(data, axes=0)
+            max_val = np.nanmax(data[max_index - 10 : max_index + 10])
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
@@ -681,6 +691,16 @@ class DataCube:
             
             else:
                 self.feature_integrals[feature_name] = integral
+                
+            if calc_max == True:
+                try: 
+                    test = self.feature_max
+                            
+                except:
+                    self.feature_max = {feature_name : max_val}
+                
+                else:
+                    self.feature_max[feature_name] = max_val
          
         return integral
 
