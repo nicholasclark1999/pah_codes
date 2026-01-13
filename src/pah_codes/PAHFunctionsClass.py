@@ -659,9 +659,13 @@ class DataCube:
         # calculating max if enabled
         if calc_max == True:
             array_length_y, array_length_x = self.shape
+            max_val = np.zeros((array_length_y, array_length_x))
+            data[np.isnan(data)] = 0
             # finding max index
-            max_index = np.nanargmax(data, axis=0)
-            max_val = np.nanmax(data[max_index - 10 : max_index + 10], axis=0)
+            for i, j in ((i, j) for i in range(array_length_y) for j in range(array_length_x)):
+                if np.max(data[:,i,j]) > 0:
+                    max_index = np.argmax(data[:, i, j])
+                    max_val[i,j] = np.nanmax(data[max_index - 10 : max_index + 10, i, j])
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
