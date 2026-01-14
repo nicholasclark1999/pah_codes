@@ -660,12 +660,18 @@ class DataCube:
         if calc_max == True:
             array_length_y, array_length_x = self.shape
             max_val = np.zeros((array_length_y, array_length_x))
-            data[np.isnan(data)] = 0
+            where_are_NaNs = np.isnan(data) 
+            data[where_are_NaNs] = 0
+            
             # finding max index
             for i, j in ((i, j) for i in range(array_length_y) for j in range(array_length_x)):
-                if np.max(data[:,i,j]) > 0:
-                    max_index = np.argmax(data[:, i, j])
-                    max_val[i,j] = np.nanmax(data[max_index - 10 : max_index + 10, i, j])
+                if np.max(data[:,i,j]) == 0:
+                    max_val[i,j] = np.nan
+                else:
+                    max_index = np.nanargmax(data[:, i, j])
+                    min_range = max([max_index - 5, 0])
+                    max_range = min([max_index + 5, len(data[:,i,j])])
+                    max_val[i,j] = np.nanmean(data[min_range : max_range, i, j])
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
@@ -688,21 +694,17 @@ class DataCube:
         if feature_name is not None: # feature_name will be a string
             # check if feature_integrals dict exists, create it if it doesnt
             try: 
-                test = self.feature_integrals
-                        
+                test = self.feature_integrals  
             except:
                 self.feature_integrals = {feature_name : integral}
-            
             else:
                 self.feature_integrals[feature_name] = integral
                 
         if calc_max == True:
             try: 
                 test = self.feature_max
-                        
             except:
                 self.feature_max = {feature_name : max_val}
-            
             else:
                 self.feature_max[feature_name] = max_val
          
