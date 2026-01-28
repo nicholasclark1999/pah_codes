@@ -19,6 +19,7 @@ import random
 from os import listdir
 import os
 from scipy.integrate import simpson
+from scipy.signal import savgol_filter
 
 #saving imagaes as PDFs
 from PIL import Image  # install by > python3 -m pip install --upgrade Pillow  # ref. https://pillow.readthedocs.io/en/latest/installation.html#basic-installation
@@ -520,7 +521,7 @@ class DataCube:
             self.spline_cont = pahf.Continua(data, anchor_point_ipac, wavelengths).make_continua()
             
         self.anchor_points = anchor_point_ipac
-            
+        
 
     
     def linear_continuum(self, wave_list, tight=None, all_cont=False):
@@ -669,9 +670,9 @@ class DataCube:
                     max_val[i,j] = np.nan
                 else:
                     max_index = np.nanargmax(data[:, i, j])
-                    min_range = max([max_index - 5, 0])
-                    max_range = min([max_index + 5, len(data[:,i,j])])
-                    max_val[i,j] = np.nanmean(data[min_range : max_range, i, j])
+                    min_range = max([max_index - 10, 0])
+                    max_range = min([max_index + 10, len(data[:,i,j])])
+                    max_val[i,j] = np.nanmedian(data[min_range : max_range, i, j])
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
@@ -1077,6 +1078,66 @@ class DataCube:
             
         except:
            print('oops') # pass
+       
+        
+       
+    def make_template(self, template_loc):
+        
+        # intended to be used immediately after stitching, and no later. 
+        
+        # assume for now that template_loc is a collection of indices
+        
+        # making a new DataCube instance to store the template data
+        TemplateCube = copy.deepcopy(self)
+        
+        # updating shape
+        TemplateCube.shape = np.array([1, 1])
+        
+        # defining for convinience
+        data = TemplateCube.data
+        original_data = TemplateCube.original_data
+        y = template_loc[:, 0]
+        x = template_loc[:, 1]
+        
+        # calculating mean over indices
+        N = len(y)
+        
+        template_data = data[:, y[0], x[0]]
+        template_original_data = original_data[:, y[0], x[0]]
+        i = 1
+        while i < N:
+            template_data += data[:, y[i], x[i]]
+            template_original_data += original_data[:, y[i], x[i]]
+            i += 1
+            
+        template_data = template_data/N
+        template_original_data = template_original_data/N
+    
+        # making data 3 dimensional for consistency
+        template_data = template_data[:, np.newaxis, np.newaxis]
+        template_original_data = template_original_data[:, np.newaxis, np.newaxis]
+        
+        # updating arguments
+        TemplateCube.data = template_data
+        TemplateCube.original_data = template_original_data
+        
+        return TemplateCube
     
     
-  
+    
+    def save(self, file_loc):
+        with open(file_loc, 'wb') as file:
+            pickle.dump(self.__dict__, file)
+            
+            
+            
+    @staticmethod
+    def load(file_loc):
+        with open(file_loc, 'rb') as file:
+            data = pickle.load(file)
+            
+        class_inst = DataCube('_', '_', '_', '_', '_', '_', '_', '_', '_')
+        class_inst.__dict__ = data
+        
+        return class_inst
+    

@@ -428,6 +428,104 @@ def linear_continuum(wavelengths, data, wave_list, tight=None):
     continuum[-1] = pah_slope[-1]*(wavelengths_cube[-1] - wavelengths_cube[w1]) + pah_slope_y_vals[-2]
             
     return continuum
+
+
+
+def pah_charge_fit(x, ev):
+    # fit parameters depend on average absorbed photon energy
+    ev_options = np.array([6, 8, 10, 12])
+    ev_index = np.argmin(abs(ev - ev_options))
+    
+    # defining charge log-base10 parabola ev-dep parameters
+    # first index is for ev with 0 for 6ev, 2nd for charge frac with 0 for neutral
+    A_ev = np.array([
+        [1.87, 0.70, 0.64, 0.16, 0.02], # 6eV
+        [2.16, 1.18, 0.78, 0.20, 0.02], # 8eV
+        [1.93, 0.83, 0.76, 0.22, 0.03],  # 10eV
+        [1.77, 0.74, 0.73, 0.24, 0.04]  # 12eV
+        ])
+    x0_ev =  np.array([
+        [0.99, 0.58, 1.74, 0.48, 0.38], # 6eV
+        [1.24, 1.52, 2.42, 0.52, 0.36], # 8eV
+        [0.78, 0.53, 2.04, 0.49, 0.40], # 10eV
+        [0.54, 0.39, 1.97, 0.49, 0.37]  # 12eV
+        ])
+    alpha_ev =  np.array([
+        [-0.33, -0.56, -0.40, -0.80, -1.61], # 6eV
+        [-0.27, -0.30, -0.23, -0.77, -1.59], # 8eV
+        [-0.31, -0.49, -0.15, -0.73, -1.65], # 10eV
+        [-0.35, -0.60, -0.04, -0.70, -1.67]  # 12eV
+        ])
+    beta_ev =  np.array([
+        [0.05, 0.09, 0.10, 0.13, 0.22], # 6eV
+        [0.09, 0.11, 0.14, 0.16, 0.26], # 8eV
+        [0.10, 0.13, 0.17, 0.18, 0.34], # 10eV
+        [0.12, 0.17, 0.19, 0.23, 0.40]  # 12eV
+        ])
+    
+    # specific parameters for a given ev
+    A = A_ev[ev_index]
+    x0 = x0_ev[ev_index]
+    alpha = alpha_ev[ev_index]
+    beta = beta_ev[ev_index]
+    
+    # calculating set of curves that vary by charge fraction for specified ev
+    exponent = -1*alpha -1*beta*np.log10(x/x0)
+    return A*(x/x0)**exponent
+    
+    
+
+def pah_charge(ratio_size, ratio_charge, ev):
+    # note: this is a 1d function for simplicity
+    
+    # log parabolas to compare 11.2/7.7 ratio to
+    fits = pah_charge_fit(ratio_size, ev)
+    
+    # index corresponds to charge_ratio
+    # make 0.00 for neutral, 1.00 for fully cationic
+    ionization_frac_options = np.array([0.00, 0.25, 0.50, 0.75, 1.00])
+    
+    charge_ratio_index = np.argmin(abs(fits - ratio_charge))
+    return ionization_frac_options[charge_ratio_index]
+    
+
+
+def pah_size(ratio_size, ionization_frac):
+    # fit parameters depend on ionization fraction
+    ionization_frac_options = np.array([0.00, 0.25, 0.50, 0.75, 1.00])
+    ionization_frac_index = np.argmin(abs(ionization_frac - ionization_frac_options))
+    
+    # defining power law charge-dep parameters
+    # index charge frac with 0 for neutral
+    c0_if = np.array([-2.550, -2.490, -2.430, -2.310, -2.010])
+    alpha_if = np.array([0.251, 0.248, 0.246, 0.242, 0.234])
+    
+    # specific parameters for a given ionization fraction
+    c0 = c0_if[ionization_frac_index]
+    alpha = alpha_if[ionization_frac_index]
+    
+    # IR is ionization ratio, of 11.2 and 3.3
+    IR = np.log10(ratio_size)
+    # now determining size from power law (note IR is a log of ionization ratio)
+    # IR = c0 + NC**alpha   original, unaranged for NC form
+    # log(NC) = log(IR - c0)/alpha
+    exponent = (np.log10(IR - c0))/alpha
+    return 10**exponent
+
+
+
+def pah_properties(integral_33, integral_77, integral_112, ev):
+    # note: this is a 1d function for simplicity
+    
+    # calculating ratios, in form of 11.2/3.3, 7.7
+    # applying correction to 3.3 paper based on lemmens2023
+    ratio_size = integral_112/(integral_33*1.34)
+    ratio_charge = integral_112/integral_77
+
+    ionization_frac = pah_charge(ratio_size, ratio_charge, ev)
+    NC = pah_size(ratio_size, ionization_frac)
+    
+    return ionization_frac, NC
   
 
 
