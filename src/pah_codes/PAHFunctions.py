@@ -11,6 +11,8 @@ Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 IMPORTING MODULES
 '''
 
+
+
 #standard stuff
 import matplotlib.pyplot as plt
 import numpy as np
@@ -110,6 +112,7 @@ def planck_wl(
     ).to(output_unit) # fmt: skip
 
 
+
 def modified_planck_wl(
     x: Quantity,
     T: Quantity,
@@ -140,17 +143,17 @@ def modified_planck_wl(
 
 
 
-def mean_from_wave(data, wavelengths, shape, wave_list):
+def mean_from_wave(wavelengths, data, shape, wave_list):
     """
     Calculates a mean of the wavelength and flux over a specified wavelength array, intended as a convinience
     function for the mbb fitting algorithm.
 
     Parameters
     ----------
-    data : numpy.ndarray
-        data cube of fluxes.
     wavelengths : numpy.ndarray
         wavelength array.
+    data : numpy.ndarray
+        data cube of fluxes.
     shape : tuple of ints
         y and x dimension lengths.
     wave_list : numpy.ndarray
@@ -348,6 +351,124 @@ def png_combine(directory_loc, pdf_name, reso=100, delete=True):
             
             
 
+def line_slope(wavelengths, data, wave_bounds, tight=False):
+    """
+    Determines the slope of a line fit to data between specified wavelengths.
+
+    Parameters
+    ----------
+    wavelengths : numpy.ndarray
+        wavelength array.
+    data : numpy.ndarray
+        data cube of fluxes.
+    wave_bounds : numpy.ndarray
+        beginning and ending wavelengths corresponding to the line slope.
+    tight : Bool
+        if True, uses the specified flux value of the wavelength instead of a median. Intended for 
+        tricky regions with dense lines.
+    """
+    
+    # dimensions of data cube
+    array_y, array_x = data[0].shape
+    t1, t2 = type(wave_bounds[0]), type(wave_bounds[1])
+    # indices corresponding to the bounds
+    if (t1 == int or t1 == np.int64) and (t2 == int or t2 == np.int64):
+        w1, w2 = wave_bounds
+    else:
+        w1 = np.argmin(abs(wavelengths - wave_bounds[0]))
+        w2 = np.argmin(abs(wavelengths - wave_bounds[1]))
+    
+    # calculating y vals, slope
+    y_vals_1 = np.ones((array_y, array_x))
+    y_vals_2 = np.ones((array_y, array_x))
+    slope = np.ones((array_y, array_x))
+    
+    # y value logic (median or not)
+    if tight==True:
+        y_vals_1 = np.copy(data[w1])
+        y_vals_2 = np.copy(data[w2])
+    # edge cases
+    elif w1 < 5:
+        y_vals_2 = np.median(data[w2 : 5 + w2], axis=0)
+        y_vals_1 = np.copy(y_vals_2)
+        
+    elif len(wavelengths) - w2 < 5:
+        y_vals_1 = np.median(data[w1 - 5 : w1], axis=0)  
+        y_vals_2 = np.copy(y_vals_1)
+        
+    else:
+        y_vals_1 = np.median(data[w1 - 5 : w1], axis=0)  
+        y_vals_2 = np.median(data[w2 : 5 + w2], axis=0)
+    
+    # need wavelengths to have 2d shape
+    wave1 = wavelengths[w1]*np.ones((array_y, array_x))
+    wave2 = wavelengths[w2]*np.ones((array_y, array_x))
+    
+    slope = (y_vals_2 - y_vals_1)/(wave2 - wave1)
+    
+    return slope, y_vals_1
+
+
+
+def line_replacement(wavelengths, data, wave_list, tight=False, nan_for_data=False):
+    """
+    Replaces segments of a data cube with linear functions.
+
+    Parameters
+    ----------
+    wavelengths : numpy.ndarray
+        wavelength array.
+    data : numpy.ndarray
+        data cube of fluxes.
+    wave_list : numpy.ndarray
+        Nx2 shape, each N is beginning and ending wavelengths corresponding to a line slope.
+    tight : Bool
+        if True, uses the specified flux value of the wavelength instead of a median. Intended for 
+        tricky regions with dense lines, or when noise is negligable.
+    nan_for_data : Bool
+        if True, uses NaN for data elements that have not been replaced by a line
+    """
+    
+    # dimensions of data cube
+    array_y, array_x = data[0].shape
+
+    # determining number of anchor points from wave_list
+    N = len(wave_list[:,0])
+    
+    # turning wavelengths into corresponding indices
+    index = np.ones(wave_list.shape).astype(np.int64)     
+    for i, j in ((i, j) for i in range(N) for j in range(2)):
+        index[i, j] = np.argmin(abs(wavelengths - wave_list[i,j]))
+        
+    # slope, y_vals_1  arrays
+    slope = np.ones((N, array_y, array_x))
+    y_vals_1 = np.ones((N, array_y, array_x))
+    
+    #need wavelengths[i] to have 2d shape
+    wavelengths_cube = np.ones((len(wavelengths), array_y, array_x))
+    for i, wave in enumerate(wavelengths):
+        wavelengths_cube[i] = wave
+        
+    # determining slopes and y_vals
+    for i in range(N):
+        slope[i], y_vals_1[i] = line_slope(wavelengths, data, index[i], tight=tight)
+    
+    # building data array with lines replaced by slopes  
+    if nan_for_data == True:
+        new_data = np.nan*np.ones(data.shape)
+    else:
+        new_data = np.copy(data)
+
+    for i in range(N):
+        w1, w2 = index[i]
+        for j in range(w2 - w1 + 1):
+            k = w1 + j
+            new_data[k] = slope[i]*(wavelengths_cube[k] - wavelengths_cube[w1]) + y_vals_1[i]
+    
+    return new_data
+
+
+
 def linear_continuum(wavelengths, data, wave_list, tight=None):           
     """
     calculates a series of linear functions spanning the entire spectra, which serve as a continuum.
@@ -368,66 +489,60 @@ def linear_continuum(wavelengths, data, wave_list, tight=None):
     continuum : numpy.ndarray
         continuum array. Same shape as data if 3d is used (untested).
     """    
-
-    array_y, array_x = 1, 1
     
-    # determining number of anchor points from wave_list
+    # determining number of anchor points from wave_list, and number of wavelengths
     N = len(wave_list)
+    M = len(wavelengths)
     
-    temp_index = np.ones(N+2).astype(np.int64)
-    temp_index[0] = 0
-    temp_index[-1] = len(wavelengths) - 1
+    # adding 0 and M-1 to wave_list
+    wave_list = np.insert(wave_list, N, M-1)
+    wave_list = np.insert(wave_list, 0, 0)
     
-    for i in range(N):
-        temp_index[i+1] = np.argmin(abs(wavelengths - wave_list[i]))
+    # need to turn Nx1 array into Nx2 array with sets of anchor points
+    index = np.zeros((N+2, 2)).astype(np.int64)
+    for i, wave in enumerate(wave_list):
+        index[i] = wave, wave_list[i+1]
+    
+    linear_cont = line_replacement(wavelengths, data, index, tight=tight)    
+    
+    return linear_cont
+
+
+
+def cube_max(data):
+    """
+    Also determines the max of each pixel in a data cube.
+    
+    Parameters
+    ----------
+    data : numpy.ndarray
+       spectra array. only intended to be used with 1d spectra but may work with 3d (untested).
+       
+    Returns
+    -------
+    max_val : np.ndarray
+        maximum of each value in the data cube
+    """     
+
+    # shape of data cube
+    M, array_length_y, array_length_x = data.shape
+    
+    # array to store max vals
+    max_val = np.zeros((array_length_y, array_length_x))
+    where_are_NaNs = np.isnan(data) 
+    data[where_are_NaNs] = 0
         
-    # value used in slope median
-    median_val = 15
-    if tight != None:
-        median_val = tight
-    
-    # calculating slope y vals
-    pah_slope_y_vals = np.ones((N+2, array_y, array_x))
-    
-    for i in range(N+2):
-        if i == 0:
-            pah_slope_y_vals[i] = np.median(data[temp_index[i] : temp_index[i] + median_val], axis=0)
-        elif i < N+1:
-            pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i] + median_val], axis=0)  
+    # finding max index
+    for i, j in ((i, j) for i in range(array_length_y) for j in range(array_length_x)):
+        if np.max(data[:,i,j]) == 0:
+            max_val[i,j] = np.nan
         else:
-            pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i]], axis=0)
-    
-    # calculating slopes
-    pah_slope = np.ones((N+1, array_y, array_x))
-    
-    #need wavelengths[i] to have 2d shape
-    wavelengths_cube = np.ones((len(wavelengths), array_y, array_x))
-    for i in range(len(wavelengths)):
-        wavelengths_cube[i] = wavelengths[i]
-    
-    for i in range(N+1):
-        # short form wavelength indices        
-        w1 = temp_index[i]
-        w2 = temp_index[i+1]
-        pah_slope[i] = (pah_slope_y_vals[i+1] - pah_slope_y_vals[i])/\
-            (wavelengths_cube[w2] - wavelengths_cube[w1])
-                
-    # calculating continuum
-    continuum = 0*np.copy(data)
-    
-    j = 0
-    for i in range(N+1):            
-        # short form wavelength indices        
-        w1 = temp_index[i]
-        w2 = temp_index[i+1]
-        
-        while j < w2:
-            continuum[j] = pah_slope[i]*(wavelengths_cube[j] - wavelengths_cube[w1]) + pah_slope_y_vals[i]
-            j += 1
-    
-    continuum[-1] = pah_slope[-1]*(wavelengths_cube[-1] - wavelengths_cube[w1]) + pah_slope_y_vals[-2]
+            max_index = np.nanargmax(data[:, i, j])
+            min_range = max([max_index - 5, 0])
+            max_range = min([max_index + 5, M])
+            max_val[i,j] = np.nanmedian(data[min_range : max_range, i, j])
             
-    return continuum
+    return max_val
 
 
 
@@ -435,6 +550,8 @@ def pah_charge_fit(x, ev):
     # fit parameters depend on average absorbed photon energy
     ev_options = np.array([6, 8, 10, 12])
     ev_index = np.argmin(abs(ev - ev_options))
+    x = np.copy(x[np.newaxis, :, :]*np.ones((5, x.shape[0], x.shape[1])))
+    M = x.shape
     
     # defining charge log-base10 parabola ev-dep parameters
     # first index is for ev with 0 for 6ev, 2nd for charge frac with 0 for neutral
@@ -464,10 +581,11 @@ def pah_charge_fit(x, ev):
         ])
     
     # specific parameters for a given ev
-    A = A_ev[ev_index]
-    x0 = x0_ev[ev_index]
-    alpha = alpha_ev[ev_index]
-    beta = beta_ev[ev_index]
+    # shape needs to be (5, x[0], x[1]) for everything
+    A = A_ev[ev_index][:, np.newaxis, np.newaxis]*np.ones(M)
+    x0 = x0_ev[ev_index][:, np.newaxis, np.newaxis]*np.ones(M)
+    alpha = alpha_ev[ev_index][:, np.newaxis, np.newaxis]*np.ones(M)
+    beta = beta_ev[ev_index][:, np.newaxis, np.newaxis]*np.ones(M)
     
     # calculating set of curves that vary by charge fraction for specified ev
     exponent = -1*alpha -1*beta*np.log10(x/x0)
@@ -479,21 +597,20 @@ def pah_charge(ratio_size, ratio_charge, ev):
     # note: this is a 1d function for simplicity
     
     # log parabolas to compare 11.2/7.7 ratio to
-    fits = pah_charge_fit(ratio_size, ev)
+    fits = pah_charge_fit(ratio_size, ev) # (5, y, x)
+    ratio_charge = np.copy(ratio_charge[np.newaxis, :, :]*np.ones(fits.shape))
     
     # index corresponds to charge_ratio
     # make 0.00 for neutral, 1.00 for fully cationic
     ionization_frac_options = np.array([0.00, 0.25, 0.50, 0.75, 1.00])
-    
-    charge_ratio_index = np.argmin(abs(fits - ratio_charge))
+    charge_ratio_index = np.argmin(abs(fits - ratio_charge), axis=0)
     return ionization_frac_options[charge_ratio_index]
     
 
 
 def pah_size(ratio_size, ionization_frac):
     # fit parameters depend on ionization fraction
-    ionization_frac_options = np.array([0.00, 0.25, 0.50, 0.75, 1.00])
-    ionization_frac_index = np.argmin(abs(ionization_frac - ionization_frac_options))
+    ionization_frac_index = (4*ionization_frac).astype(np.int64)
     
     # defining power law charge-dep parameters
     # index charge frac with 0 for neutral
@@ -510,13 +627,11 @@ def pah_size(ratio_size, ionization_frac):
     # IR = c0 + NC**alpha   original, unaranged for NC form
     # log(NC) = log(IR - c0)/alpha
     exponent = (np.log10(IR - c0))/alpha
-    return 10**exponent
+    return np.round(10**exponent, 0).astype(np.int64)
 
 
 
 def pah_properties(integral_33, integral_77, integral_112, ev):
-    # note: this is a 1d function for simplicity
-    
     # calculating ratios, in form of 11.2/3.3, 7.7
     # applying correction to 3.3 paper based on lemmens2023
     ratio_size = integral_112/(integral_33*1.34)

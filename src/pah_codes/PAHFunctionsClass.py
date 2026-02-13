@@ -5,11 +5,17 @@ Created on Thu Feb  1 12:40:43 2024
 Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 
 @author: nclark
+
+variables changed: 
+best_mbb to mbb_cont
+all_cont=True to mbb_cont_sub=True in spline_continuum
 """
 
 '''
 IMPORTING MODULES
 '''
+
+
 
 #standard stuff
 import matplotlib.pyplot as plt
@@ -63,7 +69,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import copy
 from math import floor, ceil
 
-import pah_codes.PAHFunctions as pahf
+import PAHFunctions as pahf
 
 new = np.newaxis
 
@@ -251,8 +257,8 @@ class DataCube:
         #standardized shape
         shape = np.array([array_y, array_x])
         
-        # defining overlap list for if stitching occurs, unused here
-        overlap = 'unused'
+        # defining overlap list for if stitching occurs
+        overlap = []
         
         # determining where fov is based on NaNs, unused here
         fov_mask = 'unused'
@@ -302,95 +308,26 @@ class DataCube:
 
 
     
-    def emission_line_remover(self, wave_list, special=None, cont_mode=False):
+    def emission_line_remover(self, wave_list, tight=False):
         """
-        removes a single emission line occupying a specified wavelength range, by 
-        replacing the line with a linear function. The slope is calculated by 
-        using points below the blue end and above the red end. Creates local_cont argument.
+        Wrapper for line_replacement, intended to remove isolated emission and
+        absorption lines. Replaces data argument.
 
         Parameters
         ----------
         wave_list : numpy.ndarray
             Nx2 array, specifying the beginning and end of each emission line.
-        special : NoneType
-            if not none, uses the specified flux value of the wavelength instead of a median. Intended for 
+        tight : Bool
+            if True, uses the specified flux value of the wavelength instead of a median. Intended for 
             tricky regions with dense lines.
-        cont_mode : bool
-            reusing the emission line code for building a local continuum instead of an emission line, subtracts
-            spline continuum from the data at the same time.
         """
         
         wavelengths = self.wavelengths
-        if cont_mode == False:
-            data = self.data
-        else:
-            data = self.data - self.spline_cont
-        array_y, array_x = self.shape[0], self.shape[1]
+        data = self.data
+        
+        new_data = pahf.line_replacement(wavelengths, data, wave_list, tight=tight)
+        self.data = new_data
 
-        # determining number of anchor points from wave_list
-        N = len(wave_list[:,0])
-        
-        temp_index_1 = np.ones(N).astype(np.int64)   
-        temp_index_2 = np.ones(N).astype(np.int64)   
-        
-        for i in range(N):
-            temp_index_1[i] = np.argmin(abs(wavelengths - wave_list[i,0]))
-            temp_index_2[i] = np.argmin(abs(wavelengths - wave_list[i,1]))
-        
-        # calculating slope y vals, slope
-        pah_slope_y_vals_1 = np.ones((N, array_y, array_x))
-        pah_slope_y_vals_2 = np.ones((N, array_y, array_x))
-        pah_slope = np.ones((N, array_y, array_x))
-        
-        #need wavelengths[i] to have 2d shape
-        wavelengths_cube = np.ones((len(wavelengths), array_y, array_x))
-        for i in range(len(wavelengths)):
-            wavelengths_cube[i] = wavelengths[i]
-        
-        for i in range(N):
-            # short form wavelength indices    
-            w1 = temp_index_1[i]
-            w2 = temp_index_2[i]
-            
-            # special case when medians are dangerous 
-            if special != None:
-                pah_slope_y_vals_1[i] = data[w1]
-                pah_slope_y_vals_2[i] = data[w2]
-                
-            # edge cases
-            elif w1 < 5:
-                pah_slope_y_vals_2[i] = np.median(data[w2 : 5 + w2], axis=0)
-                pah_slope_y_vals_1[i] = pah_slope_y_vals_2[i]
-                
-            elif len(wavelengths) - w2 < 5:
-                pah_slope_y_vals_1[i] = np.median(data[w1 - 5 : w1], axis=0)  
-                pah_slope_y_vals_2[i] = pah_slope_y_vals_1[i]
-                
-            else:
-                pah_slope_y_vals_1[i] = np.median(data[w1 - 5 : w1], axis=0)  
-                pah_slope_y_vals_2[i] = np.median(data[w2 : 5 + w2], axis=0)
-                
-            pah_slope[i] = (pah_slope_y_vals_2[i] - pah_slope_y_vals_1[i])/\
-                (wavelengths_cube[w2] - wavelengths_cube[w1])
-        
-        #putting it all together     
-        new_data = np.copy(data)
-
-        for i in range(N):
-            # short form wavelength indices    
-            w1 = temp_index_1[i]
-            w2 = temp_index_2[i]
-            
-            M = w2 - w1
-            for j in range(M+1):
-                k = w1 + j
-                new_data[k] = pah_slope[i]*(wavelengths_cube[k] - wavelengths_cube[w1]) + pah_slope_y_vals_1[i]
-        
-        if cont_mode == False:
-            self.data = new_data
-        else:
-            self.local_cont = new_data
-        
         
         
     def mbb_continuum(self, bb, bb_check, temp, amp, gamma):
@@ -447,8 +384,8 @@ class DataCube:
         mbb_check = pahf.modified_planck_wl(wavecube_check, tempcube_check, ampcube_check, gamma)
 
         # least squares test, and staying positive check
-        meancube = pahf.mean_from_wave(data, wavelengths, shape, bb)
-        meancube_check = pahf.mean_from_wave(data, wavelengths, shape, bb_check)
+        meancube = pahf.mean_from_wave(wavelengths, data, shape, bb)
+        meancube_check = pahf.mean_from_wave(wavelengths, data, shape, bb_check)
 
         # need to combine objects of  (case, wave, T, A) and (case, wave, y, x)
         least_squares = np.nansum(((mbb[:, :, new, new, :, :] - meancube[:, :, :, :, new, new])**2), axis=1)
@@ -479,7 +416,7 @@ class DataCube:
 
         case_to_use = np.argmin(min_least_squares_all_case, axis=0)
 
-        best_mbb = np.ones((len(wavelengths), shape[0], shape[1]))
+        mbb_cont = np.ones((len(wavelengths), shape[0], shape[1]))
         best_wavecube = np.ones((size_wave, shape[0], shape[1]))
         best_meancube = np.ones((size_wave, shape[0], shape[1]))
 
@@ -489,18 +426,17 @@ class DataCube:
             best_meancube[:, i, j] = meancube[case_to_use[i, j], :, i, j]
             
             optimal_vals[i, j] = T, A = optimal_vals_all_case[case_to_use[i, j], i, j]
-            best_mbb[:, i, j] = pahf.modified_planck_wl(wavelengths*Unit('um'), T*Unit('K'), A, gamma)
+            mbb_cont[:, i, j] = pahf.modified_planck_wl(wavelengths*Unit('um'), T*Unit('K'), A, gamma)
         
         self.case_to_use = case_to_use
         self.best_wavecube = best_wavecube
         self.best_meancube = best_meancube
-        
         self.dust_vals = optimal_vals
-        self.best_mbb = best_mbb
+        self.mbb_cont = mbb_cont
         
         
         
-    def spline_continuum(self, anchor_point_ipac, all_cont=False):
+    def spline_continuum(self, anchor_point_ipac, mbb_cont_sub=False):
         """
         wrapper function for the spline continuum code.
 
@@ -508,15 +444,15 @@ class DataCube:
         ----------
         anchor_point_ipac : string
             file location of the ipac table containing the anchor points.
-       all_cont : boolean 
-           for if mbb, spline, and linear continuum are being ran in succession.
+       mbb_cont_sub : boolean 
+           subtract mbb_cont from data before calculating spline_cont
         """
         
         wavelengths = self.wavelengths
         data = np.copy(self.data)
         
-        if all_cont == True:
-            self.spline_cont = pahf.Continua(data - self.best_mbb, anchor_point_ipac, wavelengths).make_continua()
+        if mbb_cont_sub == True:
+            self.spline_cont = pahf.Continua(data - self.mbb_cont, anchor_point_ipac, wavelengths).make_continua()
         else:
             self.spline_cont = pahf.Continua(data, anchor_point_ipac, wavelengths).make_continua()
             
@@ -524,125 +460,72 @@ class DataCube:
         
 
     
-    def linear_continuum(self, wave_list, tight=None, all_cont=False):
+    def linear_continuum(self, wave_list, tight=False, cont_sub=None):
         """
-        calculates a series of connected linear functions meant to serve as local continua under well-behaved fatures.
+        Fits linear functions to data to serve as a continuum. Depending on dimensions
+        of wave_list, either isolates well-behaved features from the complexes
+        they are a part of using linear functions, with areas outside of specified 
+        wavelength ranges are NaN. 
+        Or, fits a series of linear functions over the entire wavelength range.
 
         Parameters
         ----------
         wave_list : numpy.ndarray
-            array specifying the wavelengths of the fluxes to be used for constructing the linear functions.
-        tight : NoneType
-            uses less values in median calculation for when there are small amounts of continuum available.
-       all_cont : boolean 
-           for if mbb, spline, and linear continuum are being ran in succession.
+            Nx2 array, specifying the beginning and end of each linear function.
+            Or, Nx1 array, specifying a series of linear continuum anchor points.
+        tight : bool
+            If True, uses a single y value for continuum instead of a median of surrounding values.
+       cont_sub : NoneType
+           If mbb, spline are in a string, they will be subtracted from the data.
         """
+        
         wavelengths = self.wavelengths
-
-        if all_cont == True:
-            data = np.copy(self.data) - self.spline_cont - self.best_mbb
+        data = np.copy(self.data)
+        
+        # determining data to fit linear continuum to
+        if 'mbb' in cont_sub:
+            data -= self.mbb_cont
+        if 'spline' in cont_sub:
+            data -= self.spline_cont
+        
+        # calculating linear cont
+        if wave_list.ndim == 2:
+            linear_cont = pahf.line_replacement(wavelengths, data, wave_list, tight=tight, nan_for_data=True)
+        
         else:
-            data = np.copy(self.data)
+            # note linear_continuum rearranges wave_list and then inserts it into line_replacement
+            linear_cont = pahf.linear_continuum(wavelengths, data, wave_list, tight=tight)
         
-        array_y, array_x = self.shape[0], self.shape[1]
-
-        # determining number of anchor points from wave_list
-        N = len(wave_list)
-        
-        temp_index = np.ones(N+2).astype(np.int64)
-        temp_index[0] = 0
-        temp_index[-1] = len(wavelengths) - 1
-        
-        for i in range(N):
-            temp_index[i+1] = np.argmin(abs(wavelengths - wave_list[i]))
-            
-        # value used in slope median
-        median_val = 15
-        if tight != None:
-            median_val = tight
-        
-        # calculating slope y vals
-        pah_slope_y_vals = np.ones((N+2, array_y, array_x))
-        
-        for i in range(N+2):
-            if i == 0:
-                pah_slope_y_vals[i] = np.median(data[temp_index[i] : temp_index[i] + median_val], axis=0)
-            elif i < N+1:
-                pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i] + median_val], axis=0)  
-            else:
-                pah_slope_y_vals[i] = np.median(data[temp_index[i] - median_val : temp_index[i]], axis=0)
-        
-        # calculating slopes
-        pah_slope = np.ones((N+1, array_y, array_x))
-        
-        #need wavelengths[i] to have 2d shape
-        wavelengths_cube = np.ones((len(wavelengths), array_y, array_x))
-        for i in range(len(wavelengths)):
-            wavelengths_cube[i] = wavelengths[i]
-        
-        for i in range(N+1):
-            # short form wavelength indices        
-            w1 = temp_index[i]
-            w2 = temp_index[i+1]
-            pah_slope[i] = (pah_slope_y_vals[i+1] - pah_slope_y_vals[i])/\
-                (wavelengths_cube[w2] - wavelengths_cube[w1])
-                    
-        # calculating continuum
-        continuum = 0*np.copy(data)
-        
-        j = 0
-        for i in range(N+1):            
-            # short form wavelength indices        
-            w1 = temp_index[i]
-            w2 = temp_index[i+1]
-            
-            while j < w2:
-                continuum[j] = pah_slope[i]*(wavelengths_cube[j] - wavelengths_cube[w1]) + pah_slope_y_vals[i]
-                j += 1
-        
-        continuum[-1] = pah_slope[-1]*(wavelengths_cube[-1] - wavelengths_cube[w1]) + pah_slope_y_vals[-2]
-                
-        self.linear_cont = continuum
-        
-        
-        
-    def all_continuum(self, 
-                      bb, bb_check, temp, amp, gamma,
-                      anchor_point_ipac, 
-                      wave_list, tight=None):
-        """
-       wrapper function that runs mbb, spline and linear cont in succession using their inputs.
-        """
-
-        self.mbb_continuum(bb, bb_check, temp, amp, gamma)
-        self.spline_continuum(anchor_point_ipac, all_cont=True)
-        self.linear_continuum(wave_list, tight, all_cont=True)
-        self.continuum = self.linear_cont + self.spline_cont + self.best_mbb
+        self.local_cont = linear_cont
     
     
     
     def pah_feature_integrator(
             self, 
-            feature_extent, 
-            unit='MJy', feature_name=None,
-            no_neg=False,
-            calc_max=False
-            ):          
+            feature_bounds, 
+            feature_name=None,
+            max_bounds=None, 
+            cont_sub=None, 
+            units='MJy', 
+            no_neg=False):          
         """
-        converts units and then integrates a feature over the specified wavelength range.
+        Converts units and then integrates a feature over the specified wavelength range.
+        Also determines the max of this feature.
 
         Parameters
         ----------
-        feature_extent : tuple of floats
+        feature_bounds : tuple of floats
             beginning and ending wavelengths to be integrated over.
-        unit : string
-            unit of data that needs to be converted (not sr.) assumed to be MJy or Jy as options.
        feature_name : NoneType
            name of the feature being integrated, for if multiple are considered in succession.
+        max_bounds : NoneType
+            beginning and ending wavelengths to consider for max, if not none.
+       cont_sub : NoneType
+           If mbb, spline, or local are in a string, they will be subtracted from the data specifically.
+        units : string
+            unit of data that needs to be converted (not sr.) assumed to be MJy or Jy as options.
          no neg : bool
              negative intensities are assumed to be zero and set accordingly.
-         calc_max : bool
-             calculate and store the max value of the feature using the integration bounds
            
         Returns
         -------
@@ -651,34 +534,41 @@ class DataCube:
         """                          
         
         # retrieving relevant wavelength range
-        feature_start =  np.argmin(abs(self.wavelengths - feature_extent[0]))
-        feature_end = np.argmin(abs(self.wavelengths - feature_extent[1]))
+        feature_start =  np.argmin(abs(self.wavelengths - feature_bounds[0]))
+        feature_end = np.argmin(abs(self.wavelengths - feature_bounds[1]))
     
         wavelengths = self.wavelengths[feature_start : feature_end]
-        data = (self.data - self.continuum)[feature_start : feature_end]
+        data = np.copy(self.data[feature_start : feature_end])
         
-        # calculating max if enabled
-        if calc_max == True:
-            array_length_y, array_length_x = self.shape
-            max_val = np.zeros((array_length_y, array_length_x))
-            where_are_NaNs = np.isnan(data) 
-            data[where_are_NaNs] = 0
+        # determining specific cont to subtract from data
+        # if not none and not a specific string, nothing is subtracted
+        if cont_sub is None: # XXX make it do no sub
+            data -= self.continuum[feature_start : feature_end]
+        else:
+            if 'mbb' in cont_sub:
+                data -= self.mbb_cont[feature_start : feature_end]
+            if 'spline' in cont_sub:
+                data -= self.spline_cont[feature_start : feature_end]
+            if 'local' in cont_sub:
+                # note local_cont may have nans on either side of the feature
+                data -= self.local_cont[feature_start : feature_end]
+                data[np.isnan(data)] = 0
+        
+        # calculating max
+        max_data = np.copy(data)
+        if max_bounds is not None:
+            if max_bounds[0] > wavelengths[0] and max_bounds[1] < wavelengths[-1]:
+                max_start =  np.argmin(abs(wavelengths - max_bounds[0]))
+                max_end = np.argmin(abs(wavelengths - max_bounds[1]))
+                max_data = data[max_start : max_end]
             
-            # finding max index
-            for i, j in ((i, j) for i in range(array_length_y) for j in range(array_length_x)):
-                if np.max(data[:,i,j]) == 0:
-                    max_val[i,j] = np.nan
-                else:
-                    max_index = np.nanargmax(data[:, i, j])
-                    min_range = max([max_index - 10, 0])
-                    max_range = min([max_index + 10, len(data[:,i,j])])
-                    max_val[i,j] = np.nanmedian(data[min_range : max_range, i, j])
+        max_val = pahf.cube_max(max_data)
     
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
-        if unit == 'MJy':
+        if units == 'MJy':
             jy_cube = (data*10**6)*(u.Jy/u.sr)
-        elif unit == 'Jy':
+        elif units == 'Jy':
             jy_cube = (data)*(u.Jy/u.sr)
 
         si_cube = jy_cube.to(u.W/((u.m**2)*u.micron*u.sr), equivalencies = 
@@ -689,27 +579,44 @@ class DataCube:
         integral = simpson(integrand_temp, x=wavelengths, axis=0)
         
         # interpretation of negative integral
-        if no_neg == True and integral < 0:
+        if no_neg == True and np.any(integral) < 0:
             integral[integral<0] = np.nan
         
         if feature_name is not None: # feature_name will be a string
             # check if feature_integrals dict exists, create it if it doesnt
-            try: 
-                test = self.feature_integrals  
-            except:
-                self.feature_integrals = {feature_name : integral}
-            else:
+            if hasattr(self, 'feature_integrals') == True:
                 self.feature_integrals[feature_name] = integral
-                
-        if calc_max == True:
-            try: 
-                test = self.feature_max
-            except:
-                self.feature_max = {feature_name : max_val}
-            else:
                 self.feature_max[feature_name] = max_val
-         
-        return integral
+                self.feature_bounds[feature_name] = feature_bounds
+                self.feature_cont_type[feature_name] = cont_sub
+            else:
+                self.feature_integrals = {feature_name : integral}
+                self.feature_max = {feature_name : max_val}
+                self.feature_bounds = {feature_name : feature_bounds}
+                self.feature_cont_type = {feature_name : cont_sub}
+            # try: 
+            #     test = self.feature_integrals  
+            # except:
+            #     self.feature_integrals = {feature_name : integral}
+            #     self.feature_max = {feature_name : max_val}
+            #     self.feature_bounds = {feature_name : feature_bounds}
+            #     self.feature_cont = {feature_name : cont_sub}
+            # else:
+            #     self.feature_integrals[feature_name] = integral
+            #     self.feature_max[feature_name] = max_val
+            #     self.feature_bounds[feature_name] = feature_bounds
+            #     self.feature_cont[feature_name] = cont_sub
+                
+        else:
+            return integral
+        
+        
+        
+    def pah_properties(self, ev):
+        integral_33 = self.feature_integrals['3p3']
+        integral_77 = self.feature_integrals['7p7']
+        integral_112 = self.feature_integrals['11p2']
+        self.charge, self.size = pahf.pah_properties(integral_33, integral_77, integral_112, ev)
 
 
     
@@ -793,7 +700,7 @@ class DataCube:
         
         wavelengths = self.wavelengths[error_index - 25 : error_index + 25]
         data = (self.data - self.continuum)[error_index - 25 : error_index + 25]
-        array_y, array_x = self.shape[0], self.shape[1]
+        array_y, array_x = self.shape
         
         # changing units 
         si_cube = np.zeros(data.shape)*(u.W/((u.m**2)*u.micron*u.sr))
