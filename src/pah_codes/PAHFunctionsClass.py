@@ -6,10 +6,21 @@ Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 
 @author: nclark
 
-variables changed: 
-best_mbb to mbb_cont
-all_cont=True to mbb_cont_sub=True in spline_continuum
 """
+
+'''
+CHANGES TO APPLY
+'''
+
+
+
+# apply to ppahs: 
+# new spline cont, change ipac to txt format, and anchor_points no longer a file loc
+
+# no need to apply to ppahs:
+# added a region trimming method 
+
+
 
 '''
 IMPORTING MODULES
@@ -303,6 +314,34 @@ class DataCube:
                         if where_are_nans[i,y,x] == True:
                             data[i,y,x] = data[i-1,y,x]
                         
+        self.data = data
+        
+        
+        
+    def fov_trim(self, region_file):
+        """
+        replaces noisy edge pixels with nans, using a provided region file generated in ds9.
+        does not trim original_data. 
+        
+        Parameters
+        ----------
+        region_file : string
+            file location of the region file.
+        """     
+        
+        data = self.data
+        
+        # turning region file into numpy array of same spatial shape as data
+        reg = regions.Regions.read(region_file, format='ds9')
+        fits_cube = fits.open(self.fits_file)
+        w = wcs.WCS(fits_cube[1].header).dropaxis(2)
+        regmask = reg[0].to_pixel(w).to_mask(mode='subpixels', subpixels=1).to_image(shape=self.shape)
+        
+        # nan instead of 0 outside region
+        regmask[regmask == 0] = np.nan
+    
+        # updating data 
+        data = regmask[np.newaxis, :, :]*data
         
         self.data = data
 
@@ -436,9 +475,9 @@ class DataCube:
         
         
         
-    def spline_continuum(self, anchor_point_ipac, mbb_cont_sub=False):
+    def spline_continuum_old(self, anchor_point_ipac, mbb_cont_sub=False):
         """
-        wrapper function for the spline continuum code.
+        wrapper function for bethany's spline continuum code.
 
         Parameters
         ----------
@@ -451,12 +490,54 @@ class DataCube:
         wavelengths = self.wavelengths
         data = np.copy(self.data)
         
+        # subtract mbb_cont if enabled
         if mbb_cont_sub == True:
-            self.spline_cont = pahf.Continua(data - self.mbb_cont, anchor_point_ipac, wavelengths).make_continua()
-        else:
-            self.spline_cont = pahf.Continua(data, anchor_point_ipac, wavelengths).make_continua()
-            
+            data -= self.mbb_cont
+        
+        # calling the class and method
+        self.spline_cont = pahf.Continua(data, anchor_point_ipac, wavelengths).make_continua()
         self.anchor_points = anchor_point_ipac
+        
+        
+        
+    def spline_continuum(self, ap_file_loc, mbb_cont_sub=False):
+        """
+        wrapper function for spline continuum code.
+
+        Parameters
+        ----------
+        ap_file_loc : string
+            file location of the anchor point info file
+       mbb_cont_sub : boolean 
+           subtract mbb_cont from data before calculating spline_cont
+        """
+        
+        wavelengths = self.wavelengths
+        data = np.copy(self.data)
+        
+        # subtract mbb_cont if enabled
+        if mbb_cont_sub == True:
+            data -= self.mbb_cont
+            
+        # getting ap info from txt file
+        ap_file = np.loadtxt(
+            'anchors/anchor_points.txt', 
+            skiprows=1, 
+            unpack=True)
+        ap_x, ap_method, ext, ap_lb, ap_ub = ap_file
+        ext = ext.astype(np.int64)
+        
+        spline_cont = pahf.spline_from_anchor_points(
+            wavelengths, 
+            data, 
+            ap_x, 
+            ap_method=ap_method, 
+            ext=ext, 
+            ap_lb=ap_lb, 
+            ap_ub=ap_ub)
+        
+        self.spline_cont = spline_cont
+        self.anchor_points = ap_x # note in old version this is a file loc
         
 
     

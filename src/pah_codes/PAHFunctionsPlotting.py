@@ -9,6 +9,16 @@ Generalized and simplified on Thurs Jan 29 6:03:00 during SOGS meeting
 """
 
 '''
+CHANGES TO APPLY
+'''
+
+
+
+# apply to ppahs: 
+# made cont_type behave like cont_sub in the integration function, allowing for multiple to be specified.
+
+
+'''
 IMPORTING MODULES
 '''
 
@@ -173,16 +183,15 @@ def cont_plotter(
     data = DataCubeInst.data[lower_i : upper_i, y, x]
     
     # cont type
-    if cont_type =='spline':
-        continuum = DataCubeInst.spline_cont[lower_i : upper_i, y, x]
-    elif cont_type == 'mbb':
-        continuum = DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
-    elif cont_type == 'local':
-        continuum == DataCubeInst.local_cont[lower_i : upper_i, y, x]
-    elif cont_type == 'cont':
-        continuum = DataCubeInst.continuum[lower_i : upper_i, y, x]
-    else:
-        continuum = 0*wavelengths
+    continuum = 0*wavelengths
+    if 'spline' in cont_type:
+        continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
+    if 'mbb' in cont_type:
+        continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+    if 'local' in cont_type:
+        continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
+    if 'cont' in cont_type:
+        continuum += DataCubeInst.continuum[lower_i : upper_i, y, x]
         
     # cont subtraction
     if cont_sub == True:
@@ -200,16 +209,15 @@ def cont_plotter(
         
     # extra cont
     if extra_cont != '':
-        if extra_cont =='spline':
-            continuum = DataCubeInst.spline_cont[lower_i : upper_i, y, x]
-        elif extra_cont == 'mbb':
-            continuum = DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
-        elif extra_cont == 'local':
-            continuum = DataCubeInst.local_cont[lower_i : upper_i, y, x]
-        elif cont_type == 'cont':
-            continuum = DataCubeInst.continuum[lower_i : upper_i, y, x]
-        else:
-            continuum = 0*wavelengths
+        continuum = 0*wavelengths
+        if 'spline' in extra_cont:
+            continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
+        if 'mbb' in extra_cont:
+            continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+        if 'local' in extra_cont:
+            continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
+        if 'cont' in extra_cont:
+            continuum += DataCubeInst.continuum[lower_i : upper_i, y, x]
         
     # y lim logic
     if np.nanmax(continuum) == 0:
@@ -361,16 +369,15 @@ def multi_cont_plotter(
             
             # cont type
             cont_type = cont_type_list[j]
-            if cont_type =='spline':
-                continuum = DataCubeInst.spline_cont[lower_i : upper_i, y, x]
-            elif cont_type == 'mbb':
-                continuum = DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
-            elif cont_type == 'local':
-                continuum == DataCubeInst.local_cont[lower_i : upper_i, y, x]
-            elif cont_type == 'cont':
-                continuum = DataCubeInst.continuum[lower_i : upper_i, y, x]
-            else:
-                continuum = 0*wavelengths
+            continuum = 0*wavelengths
+            if 'spline' in cont_type:
+                continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
+            if 'mbb' in cont_type:
+                continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+            if 'local' in cont_type:
+                continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
+            if 'cont' in cont_type:
+                continuum += DataCubeInst.continuum[lower_i : upper_i, y, x]
             
             # cont subtraction
             if cont_sub == True:
@@ -388,16 +395,15 @@ def multi_cont_plotter(
             
             # extra cont
             if extra_cont != '':
-                if extra_cont =='spline':
-                    continuum = DataCubeInst.spline_cont[lower_i : upper_i, y, x]
-                elif extra_cont == 'mbb':
+                continuum = 0*wavelengths
+                if 'spline' in extra_cont:
+                    continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
+                if 'mbb' in extra_cont:
                     continuum = DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
-                elif extra_cont == 'local':
-                    continuum == DataCubeInst.local_cont[lower_i : upper_i, y, x]
-                elif cont_type == 'cont':
-                    continuum = DataCubeInst.continuum[lower_i : upper_i, y, x]
-                else:
-                    continuum = 0*wavelengths
+                if 'local' in extra_cont:
+                    continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
+                if 'cont' in extra_cont:
+                    continuum += DataCubeInst.continuum[lower_i : upper_i, y, x]
             
             # smoothing logic
             if smooth is not None:
