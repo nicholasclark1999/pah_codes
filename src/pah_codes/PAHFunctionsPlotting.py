@@ -14,10 +14,6 @@ CHANGES TO APPLY
 
 
 
-# apply to ppahs: 
-# made cont_type behave like cont_sub in the integration function, allowing for multiple to be specified.
-
-
 '''
 IMPORTING MODULES
 '''
@@ -30,7 +26,6 @@ import numpy as np
 from matplotlib.ticker import  AutoMinorLocator
 from matplotlib.ticker import FormatStrFormatter
 import copy
-import pyregion
 from scipy.signal import savgol_filter
 
 # warning supression
@@ -38,7 +33,7 @@ import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 
-# importing functions
+# importing pah_codes
 import PAHFunctionsClass as PAH
 import PAHFunctions as pahf
 
@@ -152,6 +147,7 @@ def cont_plotter(
         title_obj='',
         title_extras='', 
         y_units='MJy/sr',
+        els_mode=False, 
         resolution=100, 
         save_loc='PDFtime/temp/',
         save=True, 
@@ -181,6 +177,9 @@ def cont_plotter(
     # defining variables
     wavelengths = DataCubeInst.wavelengths[lower_i : upper_i]
     data = DataCubeInst.data[lower_i : upper_i, y, x]
+    original_data = DataCubeInst.data[lower_i : upper_i, y, x]
+    if els_mode == True:
+        original_data = DataCubeInst.original_data[lower_i : upper_i, y, x]
     
     # cont type
     continuum = 0*wavelengths
@@ -196,6 +195,7 @@ def cont_plotter(
     # cont subtraction
     if cont_sub == True:
         data = np.copy(data - continuum)
+        original_data = np.copy(original_data - continuum)
         continuum = 0*wavelengths
         
     # cont replacement
@@ -246,8 +246,9 @@ def cont_plotter(
     ax = plt.figure(figsize=(18,10)).add_subplot(111)
     plt.title(title)
     
-    plt.plot(wavelengths, data)
-    plt.plot(wavelengths, continuum)
+    plt.plot(wavelengths, original_data, color='tab:blue', alpha=0.5)
+    plt.plot(wavelengths, data, color='tab:blue')
+    plt.plot(wavelengths, continuum, color='tab:orange')
     
     # plotting anchor points if enabled
     if anchor_points is not None:
@@ -261,6 +262,10 @@ def cont_plotter(
         plt.scatter(best_wavecube[:, y, x], best_meancube[:, y, x], color='black', zorder=10)
     
     plt.plot(wavelengths, 0*wavelengths, color='black')
+    
+    # grid lines if in els_mode
+    if els_mode == True:
+        plt.grid(which='both')
     
     ax.tick_params(axis='x', which='major', labelbottom=True, top=True, length=5, width=2)
     ax.tick_params(axis='x', which='minor', labelbottom=False, top=True)
@@ -307,6 +312,7 @@ def multi_cont_plotter(
         title_obj='',
         title_extras='', 
         y_units='MJy/sr',
+        els_mode=False, 
         resolution=100, 
         save_loc='PDFtime/temp/',
         save=True, 
@@ -366,6 +372,9 @@ def multi_cont_plotter(
             # defining variables
             wavelengths = DataCubeInst.wavelengths[lower_i : upper_i]
             data = DataCubeInst.data[lower_i : upper_i, y, x]
+            original_data = DataCubeInst.original_data[lower_i : upper_i, y, x]
+            if els_mode == True:
+                original_data = DataCubeInst.original_data[lower_i : upper_i, y, x]
             
             # cont type
             cont_type = cont_type_list[j]
@@ -382,6 +391,7 @@ def multi_cont_plotter(
             # cont subtraction
             if cont_sub == True:
                 data = np.copy(data - continuum)
+                original_data = np.copy(original_data - continuum)
                 continuum = 0*wavelengths
                 
             # cont replacement
@@ -453,8 +463,9 @@ def multi_cont_plotter(
                 upper_y_list.append(1.1*np.nanmax(scale*continuum))
             lower_x_list.append(lower)
             upper_x_list.append(upper)
-    
-            plt.plot(wavelengths, scale*data, color=colours[j])
+            
+            plt.plot(wavelengths, scale*original_data, color=colours[j], alpha=0.5)
+            plt.plot(wavelengths, scale*data, color=colours[j], label=DataCubeInst.name)
             plt.plot(wavelengths, scale*continuum, color=colours[j])
             
     # y, x lim logic
@@ -472,6 +483,11 @@ def multi_cont_plotter(
         best_wavecube = DataCubeInst.best_wavecube
         best_meancube = DataCubeInst.best_meancube
         plt.scatter(best_wavecube[:, y, x], best_meancube[:, y, x], color='black', zorder=10)
+        
+    # grid lines and legend if in els_mode
+    if els_mode == True:
+        plt.grid(which='both')
+        plt.legend(fontsize=14)
     
     plt.plot(wavelengths, 0*wavelengths, color='black')
     
