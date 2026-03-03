@@ -17,8 +17,19 @@ CHANGES TO APPLY
 # apply to ppahs: 
 # new spline cont, change ipac to txt format, and anchor_points no longer a file loc
 
-# no need to apply to ppahs:
-# added a region trimming method 
+
+
+'''
+TO DO
+'''
+
+
+
+# rename static methods to initiate like in psf matching code
+# make error array a dictionary like integrals
+# rename the 'flux aligner' functions 
+# is fringe removal in here? if not reclass imports
+# investigate importing Unit and Unit as u
 
 
 
@@ -28,77 +39,35 @@ IMPORTING MODULES
 
 
 
-#standard stuff
-import matplotlib.pyplot as plt
+# standard stuff
 import numpy as np
-from matplotlib.ticker import  AutoMinorLocator
 import random
-from os import listdir
-import os
 from scipy.integrate import simpson
-from scipy.signal import savgol_filter
+import copy
 
-#saving imagaes as PDFs
-from PIL import Image  # install by > python3 -m pip install --upgrade Pillow  # ref. https://pillow.readthedocs.io/en/latest/installation.html#basic-installation
-
-#used for fits file handling
-from astropy.utils.data import get_pkg_data_filename
+# used for fits file handling
 from astropy.io import fits
 
-#Import needed scipy libraries for curve_fit
-import scipy.optimize
-
-#Import needed sklearn libraries for RANSAC
-from sklearn.linear_model import RANSACRegressor
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import mean_squared_error
-
-#needed for fringe remover
+# needed for fringe remover
 import pickle 
 from astropy.units import Unit
 
-#needed for unit_changer
+# needed for unit_changer
 import astropy.units as u
 
-#needed for els' region function
+# needed for region function
 import regions
 from astropy.wcs import wcs
-from astropy.stats import sigma_clip
 
+# warning supression
 import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 
-# needed for bethanys continuum code
-import pandas
-import scipy.io as sio
-from astropy.io import ascii
-from scipy.interpolate import UnivariateSpline
-import statistics
-from matplotlib.backends.backend_pdf import PdfPages
-import copy
-from math import floor, ceil
-
+# importing pah_codes
 import PAHFunctions as pahf
 
 new = np.newaxis
-
-'''
-TO DO
-'''
-
-# TODO
-
-# move png_combine to regular functiosn 
-
-# rename static methods to initiate like in psf matching code
-
-# make error array a dictionary like integrals
-
-# rename the 'flux aligner' functions 
-
-# use pickle for saving classes
 
 
 
@@ -521,7 +490,7 @@ class DataCube:
             
         # getting ap info from txt file
         ap_file = np.loadtxt(
-            'anchors/anchor_points.txt', 
+            ap_file_loc, 
             skiprows=1, 
             unpack=True)
         ap_x, ap_method, ext, ap_lb, ap_ub = ap_file
@@ -564,10 +533,11 @@ class DataCube:
         data = np.copy(self.data)
         
         # determining data to fit linear continuum to
-        if 'mbb' in cont_sub:
-            data -= self.mbb_cont
-        if 'spline' in cont_sub:
-            data -= self.spline_cont
+        if cont_sub is not None:
+            if 'mbb' in cont_sub:
+                data -= self.mbb_cont
+            if 'spline' in cont_sub:
+                data -= self.spline_cont
         
         # calculating linear cont
         if wave_list.ndim == 2:
@@ -626,6 +596,10 @@ class DataCube:
         if cont_sub is None: # XXX make it do no sub
             data -= self.continuum[feature_start : feature_end]
         else:
+            # remove potential \n from end because they are annoying if cont_sub is printed
+            if '\n' in cont_sub:
+                cont_sub = cont_sub[:-1] # \n counts as 1 character
+            # subtract conts from data
             if 'mbb' in cont_sub:
                 data -= self.mbb_cont[feature_start : feature_end]
             if 'spline' in cont_sub:
@@ -675,18 +649,6 @@ class DataCube:
                 self.feature_max = {feature_name : max_val}
                 self.feature_bounds = {feature_name : feature_bounds}
                 self.feature_cont_type = {feature_name : cont_sub}
-            # try: 
-            #     test = self.feature_integrals  
-            # except:
-            #     self.feature_integrals = {feature_name : integral}
-            #     self.feature_max = {feature_name : max_val}
-            #     self.feature_bounds = {feature_name : feature_bounds}
-            #     self.feature_cont = {feature_name : cont_sub}
-            # else:
-            #     self.feature_integrals[feature_name] = integral
-            #     self.feature_max[feature_name] = max_val
-            #     self.feature_bounds[feature_name] = feature_bounds
-            #     self.feature_cont[feature_name] = cont_sub
                 
         else:
             return integral
