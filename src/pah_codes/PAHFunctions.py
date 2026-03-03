@@ -8,16 +8,37 @@ Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 """
 
 '''
+CHANGES TO APPLY
+'''
+
+
+
+# apply to ngc6644
+# removed unneeded imports
+
+
+
+'''
+TO DO
+'''
+
+
+
+# rename the 'flux aligner' functions 
+# investigate os.listdir and os import
+# investigate astropy unit and constant imports and classify better
+# retire bethanys continuum code
+
+
+
+'''
 IMPORTING MODULES
 '''
 
 
 
-#standard stuff
-import matplotlib.pyplot as plt
+# standard stuff
 import numpy as np
-from matplotlib.ticker import  AutoMinorLocator
-import random
 from os import listdir
 import os
 from time import time
@@ -25,56 +46,31 @@ from time import time
 # spline code
 from scipy.interpolate import make_splrep
 
-#saving imagaes as PDFs
-from PIL import Image  # install by > python3 -m pip install --upgrade Pillow  # ref. https://pillow.readthedocs.io/en/latest/installation.html#basic-installation
+# saving imagaes as PDFs
+# install by > python3 -m pip install --upgrade Pillow  
+# ref. https://pillow.readthedocs.io/en/latest/installation.html#basic-installation
+from PIL import Image  
 
-#used for fits file handling
-from astropy.utils.data import get_pkg_data_filename
+# used for fits file handling
 from astropy.io import fits
 
-#Import needed scipy libraries for curve_fit
-import scipy.optimize
-
-#Import needed sklearn libraries for RANSAC
-from sklearn.linear_model import RANSACRegressor
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import mean_squared_error
-
 #needed for fringe remover
-import pickle 
 from astropy.units import UnitBase, Unit, Quantity
 from astropy.constants import h, c, k_B
 
 #needed for unit_changer
 import astropy.units as u
 
-#needed for els' region function
-import regions
-from astropy.wcs import wcs
-from astropy.stats import sigma_clip
-
-import warnings
-from astropy.utils.exceptions import AstropyWarning
-warnings.simplefilter('ignore', category=AstropyWarning)
-
 # needed for bethanys continuum code
-import pandas
-import scipy.io as sio
 from astropy.io import ascii
 from scipy.interpolate import UnivariateSpline
 import statistics
-from matplotlib.backends.backend_pdf import PdfPages
 import copy
-from math import floor, ceil
 
-'''
-TO DO
-'''
-
-# TODO
-
-# rename the 'flux aligner' functions 
+# warning supression
+import warnings
+from astropy.utils.exceptions import AstropyWarning
+warnings.simplefilter('ignore', category=AstropyWarning)
 
 
 
@@ -497,16 +493,16 @@ def linear_continuum(wavelengths, data, wave_list, tight=None):
     N = len(wave_list)
     M = len(wavelengths)
     
-    # adding 0 and M-1 to wave_list
-    wave_list = np.insert(wave_list, N, M-1)
-    wave_list = np.insert(wave_list, 0, 0)
+    # adding first and last wavelengths to wave_list
+    wave_list = np.insert(wave_list, N, wavelengths[M-1])
+    wave_list = np.insert(wave_list, 0, wavelengths[0])
     
-    # need to turn Nx1 array into Nx2 array with sets of anchor points
-    index = np.zeros((N+2, 2)).astype(np.int64)
-    for i, wave in enumerate(wave_list):
-        index[i] = wave, wave_list[i+1]
+    # need to turn (N+2)x1 array into (N+1)x2 array with sets of anchor points
+    wave_pairs = np.zeros((N+1, 2))
+    for i in range(N+1):
+        wave_pairs[i] = wave_list[i], wave_list[i+1]
     
-    linear_cont = line_replacement(wavelengths, data, index, tight=tight)    
+    linear_cont = line_replacement(wavelengths, data, wave_pairs, tight=tight)    
     
     return linear_cont
 
