@@ -12,6 +12,17 @@ Generalized and simplified on Thurs Jan 29 6:03:00 during SOGS meeting
 CHANGES TO APPLY
 '''
 
+# made ylim for multiplotting 1.2 if feature norm is self
+
+'''
+TO DO
+'''
+
+
+
+# more robust units w.r.t. y axis with more accurate titles 
+
+
 
 
 '''
@@ -183,10 +194,10 @@ def cont_plotter(
     
     # cont type
     continuum = 0*wavelengths
-    if 'spline' in cont_type:
-        continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
     if 'mbb' in cont_type:
         continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+    if 'spline' in cont_type:
+        continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
     if 'local' in cont_type:
         continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
     if 'cont' in cont_type:
@@ -210,10 +221,10 @@ def cont_plotter(
     # extra cont
     if extra_cont != '':
         continuum = 0*wavelengths
-        if 'spline' in extra_cont:
-            continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
         if 'mbb' in extra_cont:
             continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+        if 'spline' in extra_cont:
+            continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
         if 'local' in extra_cont:
             continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
         if 'cont' in extra_cont:
@@ -312,6 +323,7 @@ def multi_cont_plotter(
         title_obj='',
         title_extras='', 
         y_units='MJy/sr',
+        self_scale=False, 
         els_mode=False, 
         resolution=100, 
         save_loc='PDFtime/temp/',
@@ -379,10 +391,10 @@ def multi_cont_plotter(
             # cont type
             cont_type = cont_type_list[j]
             continuum = 0*wavelengths
-            if 'spline' in cont_type:
-                continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
             if 'mbb' in cont_type:
                 continuum += DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+            if 'spline' in cont_type:
+                continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
             if 'local' in cont_type:
                 continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
             if 'cont' in cont_type:
@@ -406,10 +418,10 @@ def multi_cont_plotter(
             # extra cont
             if extra_cont != '':
                 continuum = 0*wavelengths
-                if 'spline' in extra_cont:
-                    continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
                 if 'mbb' in extra_cont:
                     continuum = DataCubeInst.mbb_cont[lower_i : upper_i, y, x]
+                if 'spline' in extra_cont:
+                    continuum += DataCubeInst.spline_cont[lower_i : upper_i, y, x]
                 if 'local' in extra_cont:
                     continuum += DataCubeInst.local_cont[lower_i : upper_i, y, x]
                 if 'cont' in extra_cont:
@@ -469,8 +481,11 @@ def multi_cont_plotter(
             plt.plot(wavelengths, scale*continuum, color=colours[j])
             
     # y, x lim logic
-    lower_y, upper_y = min(lower_y_list), max(upper_y_list)
-    lower_y = max([lower_y, 0])
+    if self_scale == True:
+        lower_y, upper_y = 0.0, 1.2
+    else:
+        lower_y, upper_y = min(lower_y_list), max(upper_y_list)
+        lower_y = max([lower_y, 0])
     lower_x, upper_x = min(lower_x_list), max(upper_x_list)
     
     # plotting anchor points if enabled

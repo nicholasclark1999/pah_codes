@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Feb  1 12:40:43 2024
-Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
+Modified extensively on Sat Sep 27 10:27:00 2025 over spain
 
 @author: nclark
 """
@@ -11,25 +11,14 @@ Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 CHANGES TO APPLY
 '''
 
-
-
-# apply to ngc6644
-# removed unneeded imports
-
-
+# added calculate_miri_R, renamed from CalculateR
+# removed bethany's continuum code
 
 '''
 TO DO
 '''
 
-
-
-# rename the 'flux aligner' functions 
-# investigate os.listdir and os import
 # investigate astropy unit and constant imports and classify better
-# retire bethanys continuum code
-
-
 
 '''
 IMPORTING MODULES
@@ -39,7 +28,6 @@ IMPORTING MODULES
 
 # standard stuff
 import numpy as np
-from os import listdir
 import os
 from time import time
 
@@ -51,21 +39,9 @@ from scipy.interpolate import make_splrep
 # ref. https://pillow.readthedocs.io/en/latest/installation.html#basic-installation
 from PIL import Image  
 
-# used for fits file handling
-from astropy.io import fits
-
-#needed for fringe remover
+#needed for mbb function
 from astropy.units import UnitBase, Unit, Quantity
 from astropy.constants import h, c, k_B
-
-#needed for unit_changer
-import astropy.units as u
-
-# needed for bethanys continuum code
-from astropy.io import ascii
-from scipy.interpolate import UnivariateSpline
-import statistics
-import copy
 
 # warning supression
 import warnings
@@ -324,7 +300,7 @@ def png_combine(directory_loc, pdf_name, reso=100, delete=True):
         whether or not to empty directory_loc after running
     """   
     
-    directory = listdir(directory_loc)
+    directory = os.listdir(directory_loc)
     pngs = []
     for file in directory:
         if '.png' in file:
@@ -595,6 +571,9 @@ def pah_charge_fit(x, ev):
 def pah_charge(ratio_size, ratio_charge, ev):
     # note: this is a 1d function for simplicity
     
+    # 7.7 goes from 7.0 to 8.2
+    # 11.2 and 11.0 go from 10.5 to 11.6
+    
     # log parabolas to compare 11.2/7.7 ratio to
     fits = pah_charge_fit(ratio_size, ev) # (5, y, x)
     ratio_charge = np.copy(ratio_charge[np.newaxis, :, :]*np.ones(fits.shape))
@@ -608,6 +587,10 @@ def pah_charge(ratio_size, ratio_charge, ev):
 
 
 def pah_size(ratio_size, ionization_frac):
+    
+    # 3.3 goes from 3.1 to 3.5, however no aliphatics included in the calculation!
+    # 11.2 and 11.0 go from 10.5 to 11.6
+    
     # fit parameters depend on ionization fraction
     ionization_frac_index = (4*ionization_frac).astype(np.int64)
 
@@ -630,7 +613,7 @@ def pah_size(ratio_size, ionization_frac):
 
 
 
-def pah_properties(integral_33, integral_77, integral_112, ev):
+def calc_pah_properties(integral_33, integral_77, integral_112, ev):
     # calculating ratios, in form of 11.2/3.3, 7.7
     # applying correction to 3.3 paper based on lemmens2023
     ratio_size = integral_112/(integral_33*1.34)
@@ -640,6 +623,64 @@ def pah_properties(integral_33, integral_77, integral_112, ev):
     NC = pah_size(ratio_size, ionization_frac)
     
     return ionization_frac, NC
+
+
+
+def calculate_miri_R(wavelength):
+    """
+    calculates the resolution of MIRI MRS based on the specified wavelength
+
+    Parameters
+    ----------
+    wavelength : float
+        wavelength R is calculated for.
+        
+    Returns
+    -------
+    R : float
+        the calculated resolution corresponding to the wavelength.
+    """     
+    
+    # 1A
+    if 4.9 <= wavelength <= 5.74:
+        coeff = [8.4645410e+03, -2.4806001e+03, 2.9600000e+02]
+    # 1B
+    elif 5.66 <= wavelength <= 6.63:
+        coeff = [1.3785873e+04, -3.8733003e+03, 3.6100000e+02]
+    # 1C
+    elif 6.53 <= wavelength <= 7.65 :
+        coeff = [9.0737793e+03, -2.0355999e+03, 1.7800000e+02]
+    # 2A
+    elif 7.51 <= wavelength <= 8.76:
+        coeff = [-1.3392804e+04, 3.8513999e+03, -2.1800000e+02]
+    # 2B
+    elif 8.67 <= wavelength <= 10.15:
+        coeff = [-3.0707996e+03, 1.0530000e+03, -4.0000000e+01]
+    # 2C
+    elif 10.01 <= wavelength <= 11.71:
+        coeff = [-1.4632270e+04, 3.0245999e+03, -1.2700000e+02]
+    # 3A
+    elif 11.55 <= wavelength <= 13.47:
+        coeff = [-6.9051500e+04, 1.1490000e+04, -4.5800000e+02]
+    # 3B
+    elif 13.29 <= wavelength <= 15.52:
+        coeff = [3.2627500e+03, -1.9200000e+02, 9.0000000e+00]
+    # 3C
+    elif 15.41 <= wavelength <= 18.02:
+        coeff = [-1.2368500e+04, 1.4890000e+03, -3.6000000e+01]
+    # 4A
+    elif 17.71 <= wavelength <= 20.94:
+        coeff = [-1.1510681e+04, 1.2088000e+03, -2.7000000e+01]
+    # 4B
+    elif 20.69 <= wavelength <= 24.44:
+        coeff = [-4.5252500e+03, 5.4800000e+02, -1.2000000e+01]
+    # 4C
+    elif 23.22 <= wavelength <= 28.1:
+        coeff = [-4.9578794e+03, 5.5819995e+02, -1.2000000e+01]
+                
+    R = coeff[0] + coeff[1]*wavelength + coeff[2]*wavelength**2
+        
+    return R
 
 
 
@@ -816,496 +857,3 @@ def spline_from_anchor_points(
     spl_func = make_splrep(ap_x, ap_y)
     spl = spl_func(wavelengths)
     return spl
-  
-
-
-'''
-BETHANYS CONTINUUM CODE
-'''
-
-
-
-class Anchor_points_and_splines():
-    """
-    A class that finds the anchor ponits and splines for the continua.
-    """
-
-    def __init__(self, spectral_cube, directory_ipac, wavelengths, length = None):
-        """
-        The constructor for Anchor_points_and_splines
-        
-        Parameters
-        ----------
-        spectral_cube [array-like]: the array with the spectral cube
-
-        directory_ipac [str]: the directory of the ipac file with the anchor info
-
-        wavelengths [array-like]: the array with the wavelengths
-
-        length [int or NoneType]: How many consecutive continuum points need to be above the data
-                                  to be an issue. If None, no continua overshoot correcting occurs.
-
-        """
-
-        self.wavelengths = wavelengths
-
-        self.spectral_cube = spectral_cube
-        anchor_ipac_data = ascii.read(directory_ipac, format = 'ipac')
-        low_to_high_inds = np.array(anchor_ipac_data['x0']).argsort()
-        # Because UnivariateSpline needs ordered values
-        self.Pl_inds = [i for i, x in enumerate(anchor_ipac_data['on_plateau'][low_to_high_inds]) if x == "True"]
-        if len(self.Pl_inds) > 0:
-            self.Pl_starting_waves = anchor_ipac_data['x0'][low_to_high_inds][self.Pl_inds]
-        self.moments = anchor_ipac_data['moment'][low_to_high_inds]
-        self.starting_waves = anchor_ipac_data['x0'][low_to_high_inds]
-        self.x0_mins = anchor_ipac_data['x0_min'][low_to_high_inds]
-        self.x0_maxes = anchor_ipac_data['x0_max'][low_to_high_inds]
-        self.bumps = anchor_ipac_data['bumps'][low_to_high_inds]
-        self.starting_waves = anchor_ipac_data['x0'][low_to_high_inds]
-        self.length = length
-
-
-
-    def starting_anchors_x(self):
-        """
-        Gets the desired wavelengths for the starting anchor points.
-
-        Returns
-        -------
-        The anchors points and their indices within wavelengths
-        """
-        indices = []
-        for wave in self.starting_waves:
-            indices.append(np.abs(np.asarray(self.wavelengths) - wave).argmin())
-        anchors = list(self.wavelengths[indices])
-        return(anchors, indices)
-
-
-
-    def find_min_brightness(self, wave, wave_min, wave_max, pixel):
-        """
-        Finds the initial x and y values of an anchor point to use when the user wants the lowest brightness.
-
-        Parameters
-        ---------
-
-        wave [float]: a wavelength between wave_min and wave_max
-
-        wave_min, wave_max [float or int]: the minimum and maximum wavelength values to look for a minimum brightness
-                                           between
-
-        pixel [lst]: a pixel within the data cube (e.g. [10, 15])
-
-        Returns
-        -------
-
-        The minimum brightness value and its corresponding wavelength
-        """
-        wavelengths = self.wavelengths
-        wanted_wavelength_inds = np.where(np.logical_and(wavelengths > wave_min, wavelengths < wave_max))[0]
-        brightness_list = list(self.spectral_cube[wanted_wavelength_inds, pixel[1], pixel[0]])
-        brightness_anchor = min(brightness_list)
-        ind_lowest_brightness = wanted_wavelength_inds[brightness_list.index(min(brightness_list))]
-        wavelength_to_change = wavelengths[ind_lowest_brightness]
-        return(brightness_anchor, wavelength_to_change)
-
-    def new_anchor_points(self, pixel):
-        """
-        Finds more accurate lists of x and y values for anchor points (based on the 'moment' column of
-        the anchor ipac table)
-
-        Parameters
-        ---------
-        pixel [lst]: a pixel within the data cube (e.g. [10, 15])
-
-        Returns
-        -------
-        A list of brightness and wavelength values for anchor points
-
-        """
-        cube = self.spectral_cube
-        moments = self.moments
-        wavelength_anchors_data =  self.starting_anchors_x()
-        wavelength_anchors = wavelength_anchors_data[0]
-        anchor_indices = wavelength_anchors_data[1]
-        # To get desired list size - will change elements of list in code
-        brightness_anchors = list(range(len(wavelength_anchors)))
-        for ind in range(len(anchor_indices)):
-            if moments[ind] == 1: # Find the mean between nearby points
-                list_for_mean = [cube[anchor_indices[ind]][pixel[1]][pixel[0]]]
-                brightness_anchors[ind] = statistics.mean(list_for_mean)
-            elif moments[ind] == 2: # Find the mean between more nearby points
-                list_for_mean = cube[anchor_indices[ind] - 2 : anchor_indices[ind] + 2, pixel[1], pixel[0]]
-                brightness_anchors[ind] = np.nanmean(list_for_mean)
-            elif moments[ind] == 3:
-             # Find the average of two anchor point means and places the x location between them
-             # Currently, the second anchor point for the average will be 0.3 microns behind the first
-             # Find indice of anchor point not given:
-                 wavelengths = self.wavelengths
-                 wave = wavelength_anchors[ind] + 0.3
-                 location = np.abs(np.asarray(wavelengths) - wave).argmin()
-                 list_for_mean_1 = [cube[anchor_indices[ind]][pixel[1]][pixel[0]],
-                                    cube[anchor_indices[ind]-1][pixel[1]][pixel[0]],
-                                    cube[anchor_indices[ind]+1][pixel[1]][pixel[0]]]
-                 list_for_mean_2 = [cube[location][pixel[1]][pixel[0]],
-                                    cube[location-1][pixel[1]][pixel[0]],
-                                    cube[location+1][pixel[1]][pixel[0]]]
-                 brightness_anchors[ind] = (statistics.mean(list_for_mean_1) + statistics.mean(list_for_mean_2))/2
-                 wavelength_anchors[ind] = (wave + wavelength_anchors[ind])/2
-            elif moments[ind] == 4:
-                pt_inds = np.where(np.logical_and(self.wavelengths > self.x0_mins[ind],
-                                                  self.wavelengths < self.x0_maxes[ind]))[0]
-                brightness_anchors[ind] = np.average(cube[pt_inds, pixel[1], pixel[0]])
-                wavelength_anchors[ind] = (self.x0_mins[ind] + self.x0_maxes[ind])/2
-            elif moments[ind] == 5: # Find the mean between lots of points (deal with fringes)
-                list_for_mean = cube[anchor_indices[ind] - 20 : anchor_indices[ind] + 20, pixel[1], pixel[0]]
-                brightness_anchors[ind] = np.nanmean(list_for_mean)
-            elif moments[ind] == 0 or self.bumps[ind] == "True":
-                # flat line over range of points, puts anchor at this value
-                wave = wavelength_anchors[ind]
-                wave_min = self.x0_mins[ind]
-                wave_max = self.x0_maxes[ind]
-                
-                lower_ind = np.argmin(abs(self.wavelengths - wave_min))
-                upper_ind = np.argmin(abs(self.wavelengths - wave_max))
-                list_for_mean = cube[lower_ind : upper_ind, pixel[1], pixel[0]]
-                brightness_anchors[ind] = np.nanmean(list_for_mean)
-                
-                # old stuff from when it found a min over the range
-                # brightness_anchor, wavelength_to_change = self.find_min_brightness(wave, wave_min,
-                #                                                                    wave_max, pixel)
-                # brightness_anchors[ind] = brightness_anchor
-                # wavelength_anchors[ind] = wavelength_to_change
-        return(brightness_anchors, wavelength_anchors)
-
-
-
-    def get_anchors_for_all_splines(self, pixel):
-        """
-        Creates the GS, LS, and plateaus' anchor points' values (brightnesses and wavelengths)
-
-        Parameters
-        ---------
-        pixel [lst]: a pixel within the data cube (e.g. [10, 15])
-
-        Returns
-        -------
-        A new list of brightness and wavelength values for anchor points
-
-        """
-        if len(self.Pl_inds) > 0:
-            plateau_waves = self.Pl_starting_waves
-        anchor_info = self.new_anchor_points(pixel)
-        brightness_anchors = anchor_info[0]
-        new_wavelength_anchors = anchor_info[1]
-        if "True" in self.bumps:
-        # We need a continuum that includes the bumps (LS) and another that doesn't (GS)
-            LS_brightness = brightness_anchors
-            LS_wavelengths = new_wavelength_anchors
-            no_bump_inds = [i for i, x in enumerate(self.bumps) if x == "False"]
-            GS_brightness = [LS_brightness[ind] for ind in no_bump_inds]
-            GS_wavelengths = [LS_wavelengths[ind] for ind in no_bump_inds]
-        if len(self.Pl_inds) > 0:
-        # We need to add a plateau (PL) continuum
-            indices = []
-            for anchor in plateau_waves:
-                indices.append(np.abs(np.asarray(new_wavelength_anchors) - anchor).argmin())
-            PL_wavelengths = [new_wavelength_anchors[ind] for ind in indices]
-            PL_brightness = [brightness_anchors[ind] for ind in indices]
-        if len(self.Pl_inds) > 0 and "True" in self.bumps:
-            return(LS_brightness, LS_wavelengths, GS_brightness, GS_wavelengths, PL_brightness,
-                   PL_wavelengths)
-        elif len(self.Pl_inds) > 0 and "True" not in self.bumps:
-            return(GS_brightness, GS_wavelengths, PL_brightness, PL_wavelengths)
-        elif len(self.Pl_inds) == 0 and "True" in self.bumps:
-            return(LS_brightness, LS_wavelengths, GS_brightness, GS_wavelengths)
-        else:
-            return(brightness_anchors, new_wavelength_anchors)
-
-
-
-    def lower_brightness(self, anchor_waves, anchor_brightness, Cont, pixel):
-        """
-        Checks if the continuum is higher than the brightness for self.length consecutive points and
-        lowers the continuum if it is
-        This function likely needs some refinement
-
-        Parameters
-        ----------
-        anchor_waves [lst]: a list of the anchor's wavelengths
-
-        anchor_brightnesses [lst]: a list of the anchor's brightnesses
-
-        Cont [UnivariateSpline object]: a continuum
-
-        pixel [lst]: a pixel within the data cube (e.g. [10, 15])
-
-        """
-        pixel_brightnesses = self.spectral_cube[:, pixel[1], pixel[0]]
-        no_cont_brightnesses = pixel_brightnesses - Cont
-        below_zero_inds = np.where(no_cont_brightnesses < 0)[0] # Where data is less than the continuum
-        # A few points bellow zero in no_cont_brightnesses could be due to noise, but a large range of
-        # consecutive values below zero is a problem with the continuum
-        consecutive_diff = np.diff(below_zero_inds)
-        consecutive_diff_not_1 = np.where(consecutive_diff != 1)[0]
-        split_below_zero_inds = np.split(below_zero_inds, consecutive_diff_not_1 + 1)
-        # split_below_zero_inds is a list of arrays. The arrays are split based on where
-        # the indicies of the points below zero aren't consecutive
-        for array in split_below_zero_inds:
-        # May be redundant if two arrays with consecutive < 0 values are between the same 2 anchor points
-            if len(array) > self.length:
-                subtracted_brightness_lower = np.median(no_cont_brightnesses[array])
-                # Find the nearest anchor ind to the start of the problem area
-                anchor_ind = np.abs(anchor_waves - self.wavelengths[array[0]]).argmin()
-                anchor_brightness[anchor_ind] = anchor_brightness[anchor_ind] + subtracted_brightness_lower
-                # Recall that subtracted_brightness_min is less than 0
-                # Adding it will lower brightness values
-        new_Cont = UnivariateSpline(anchor_waves, anchor_brightness, k = 3, s = 0)(self.wavelengths)
-        # s = 0 so anchor points can't move
-        # k = 3 for cubic
-        return(new_Cont, anchor_brightness)
-
-
-
-    def get_splines_with_anchors(self, pixel):
-        """
-        Creates cubic splines (LS, GS, and plateau).  Note that the plateau spline is also
-        made using lines on both ends (with the cubic spline in the middle)
-
-        Parameters
-        ---------
-        pixel [lst]: a pixel within the data cube (e.g. [10, 15])
-
-        Returns
-        -------
-        A dictionary of continua, as well as the values of the wavelengths and brightnesses used for the
-        anchor points of each continuum
-
-        """
-        all_wavelengths = self.wavelengths
-        anchor_data = self.get_anchors_for_all_splines(pixel)
-        spline_and_anchor_dict = {}
-        if "True" in self.bumps:
-            spline_and_anchor_dict["LS_wave_anchors"] = anchor_data[1]
-            spline_and_anchor_dict["LS_brightness_anchors"] = anchor_data[0]
-            spline_and_anchor_dict["GS_wave_anchors"] = anchor_data[3]
-            spline_and_anchor_dict["GS_brightness_anchors"] = anchor_data[2]
-            ContLS = UnivariateSpline(spline_and_anchor_dict["LS_wave_anchors"],
-                                      spline_and_anchor_dict["LS_brightness_anchors"],
-                                      k = 3, s = 0)(all_wavelengths)
-            if self.length != None:
-                new_LS = self.lower_brightness(spline_and_anchor_dict["LS_wave_anchors"],
-                                               spline_and_anchor_dict["LS_brightness_anchors"],
-                                               ContLS, pixel)
-                spline_and_anchor_dict["LS_brightness_anchors"] = new_LS[1]
-                spline_and_anchor_dict["ContLS"] = new_LS[0]
-            else:
-                spline_and_anchor_dict["ContLS"] = ContLS
-            if len(self.Pl_inds) > 0:
-                spline_and_anchor_dict["PL_wave_anchors"] = anchor_data[5]
-                spline_and_anchor_dict["PL_brightness_anchors"] = anchor_data[4]
-        else:
-            spline_and_anchor_dict["GS_wave_anchors"] = anchor_data[1]
-            spline_and_anchor_dict["GS_brightness_anchors"] = anchor_data[0]
-            if len(self.Pl_inds) > 0:
-                spline_and_anchor_dict["PL_wave_anchors"] = anchor_data[3]
-                spline_and_anchor_dict["PL_brightness_anchors"] = anchor_data[2]
-        ContGS = UnivariateSpline(spline_and_anchor_dict["GS_wave_anchors"],
-                                  spline_and_anchor_dict["GS_brightness_anchors"],
-                                  k = 3, s = 0)(all_wavelengths)
-        if self.length != None:
-            new_GS = self.lower_brightness(spline_and_anchor_dict["GS_wave_anchors"],
-                                           spline_and_anchor_dict["GS_brightness_anchors"],
-                                           ContGS, pixel)
-            spline_and_anchor_dict["GS_brightness_anchors"] = new_GS[1]
-            spline_and_anchor_dict["ContGS"] = new_GS[0]
-        else:
-            spline_and_anchor_dict["ContGS"] = ContGS
-        if len(self.Pl_inds) > 0: # Easier to do this here since two cases above have PL conts
-            ContPL = copy.deepcopy(spline_and_anchor_dict["ContGS"])
-            for plateau in range(int(len(self.Pl_inds)/2)): # Each Pl defined by 2 points
-                line = UnivariateSpline([spline_and_anchor_dict["PL_wave_anchors"][0 + 2*plateau],
-                                         spline_and_anchor_dict["PL_wave_anchors"][1 + 2*plateau]],
-                                        [spline_and_anchor_dict["PL_brightness_anchors"][0 + 2*plateau],
-                                         spline_and_anchor_dict["PL_brightness_anchors"][1 + 2*plateau]],
-                                        k = 1, s = 0)(all_wavelengths) # k = 1 for a line
-                indices_contPL = np.where(np.logical_and(all_wavelengths > spline_and_anchor_dict["PL_wave_anchors"][0 + 2*plateau],
-                                          all_wavelengths < spline_and_anchor_dict["PL_wave_anchors"][1 + 2*plateau]))[0]
-                ContPL[indices_contPL] = line[indices_contPL]
-            spline_and_anchor_dict["ContPL"] = ContPL
-        return(spline_and_anchor_dict)
-
-
-
-    def fake_get_splines_with_anchors(self):
-        """
-        A function that returns the same output as get_splines_with_anchors, but everything is
-        0. Intended for flagged pixels.
-
-        Returns
-        -------
-        See get_splines_with_anchors
-
-        """
-        spline_and_anchor_dict = {}
-        splines = np.zeros(len(self.wavelengths))
-        bump_inds = [i for i, x in enumerate(self.bumps) if x == "True"]
-        Pl_inds = self.Pl_inds
-        spline_and_anchor_dict["ContGS"] = splines
-        if "True" in self.bumps:
-            spline_and_anchor_dict["LS_wave_anchors"] = np.zeros(len(self.bumps))
-            spline_and_anchor_dict["LS_brightness_anchors"] = np.zeros(len(self.bumps))
-            spline_and_anchor_dict["ContLS"] = splines
-            spline_and_anchor_dict["GS_wave_anchors"] = np.zeros(len(self.bumps) - len(bump_inds))
-            spline_and_anchor_dict["GS_brightness_anchors"] = np.zeros(len(self.bumps) - len(bump_inds))
-        else:
-            spline_and_anchor_dict["GS_wave_anchors"] = np.zeros(len(self.bumps))
-            spline_and_anchor_dict["GS_brightness_anchors"] = np.zeros(len(self.bumps))
-        if len(Pl_inds) > 0:
-            spline_and_anchor_dict["PL_wave_anchors"] = np.zeros(len(Pl_inds))
-            spline_and_anchor_dict["PL_brightness_anchors"] = np.zeros(len(Pl_inds))
-            spline_and_anchor_dict["ContPL"] = splines
-        return(spline_and_anchor_dict)
-
-
-
-class Continua():
-    """
-    A class for plotting and making continua files
-    """
-
-    def __init__(self, spectral_cube, directory_ipac, wavelengths, spectral_cube_unc=None, length = None):
-        """
-        The constructor for Continua
-
-        Parameters
-        ----------
-        spectral_cube [array-like]: the array with the spectral cube
-
-        spectral_cube_unc [array-like or NoneType]: the array with the uncertainty cube (or None if no
-                                              uncertainties exist)
-
-        directory_ipac [str]: the directory of the ipac file with the anchor info
-
-        wavelengths [array-like]: the array with the wavelengths
-
-        length [int or NoneType]: How many consecutive continuum points need to be above the data
-                                  to be an issue. If None, no continua overshoot correcting occurs.
-
-        """
-
-        self.wavelengths = wavelengths
-        self.spectral_cube = spectral_cube
-        self.spectral_cube_unc = spectral_cube_unc
-        
-        self.anchors_and_splines = Anchor_points_and_splines(spectral_cube, directory_ipac, wavelengths, length = length)
-
-        self.moments = self.anchors_and_splines.moments
-        self.starting_waves = self.anchors_and_splines.starting_waves
-        self.Pl_inds = self.anchors_and_splines.Pl_inds
-        self.bumps = self.anchors_and_splines.bumps
-        
-        
-
-    def make_fits_file(self, array, save_loc):
-        """
-        Takes a 3 dimensional np array and turns it into a .fits file.
-
-        Parameters
-        ----------
-        array [np.array]: a 3D np.array
-
-        save_loc [str]: the directory where the saved data is stored (e.g. r"path/file_name.fits")
-
-        Returns
-        -------
-        A fits file of a cube
-
-        """
-        hdul = fits.HDUList()
-        hdul.append(fits.PrimaryHDU())
-        hdul.append(fits.ImageHDU(data = array))
-        # hdul.writeto(save_loc, overwrite=True)
-
-    def make_continua(self, per_pix = None):
-        """
-        Creats a PDF of plots of the continua and/or the continua fits files
-
-        Parameters
-        ----------
-        x_min_pix, x_max_pix, y_min_pix, y_max_pix [int or Nonetype]: the range of the pixels to include
-                                                                      if None, the shape of the cube
-                                                                      will be used (i.e. mins = 0,
-                                                                      y_max_pix = cube.shape[1],
-                                                                      x_max_pix = cube.shape[2])
-
-        fits [bool]: True or False - whether or not fits files should be created
-
-        plot [bool]: True or False - whether or not a pdf of continua plots should be created
-
-        per_pix [int or NoneType]: the nth pixels to plot (e.g. per_pix = 6 means that every 6th pixel
-                                                           is graphed, provided that the pixel's brightnesses
-                                                           aren't all 0. Pixels with all 0 values are skipped)
-                                   if None and plot = True, all continua will be graphed
-
-        max_y_plot, min_y_plot, max_x_plot, min_x_plot [int, float, str, NoneType]: the desired plt.lim values for
-                                                                                    the plots
-                                                                                    max_y = 'median'is the only
-                                                                                    excepted str
-                                                                                    max_y = 'median'is recommended
-                                                                                    when high spectral resolution
-                                                                                    results in many features
-                                                                                    atop PAH features (like with
-                                                                                    JWST data)
-
-        Returns
-        -------
-        continuum cube
-
-        """
-        data = self.spectral_cube
-        x_min_pix = 0
-        y_min_pix = 0
-        x_max_pix = data.shape[2]
-        y_max_pix = data.shape[1]
-
-        ContGS_cube = np.zeros(data.shape)
-        if "True" in self.bumps:
-            ContLS_cube = np.zeros(data.shape)
-        if len(self.Pl_inds) > 0:
-            ContPL_cube = np.zeros(data.shape)
-            
-        pix_dict = {}
-        for x in range(x_min_pix, x_max_pix):
-            for y in range(y_min_pix, y_max_pix):
-                pixel = [x, y]
-                if not np.all(data[:, pixel[1], pixel[0]] == 0):
-                    splines_and_anchors = self.anchors_and_splines.get_splines_with_anchors(pixel)
-                else:
-                    splines_and_anchors = self.anchors_and_splines.fake_get_splines_with_anchors()
-                pix_dict[str(pixel)] = splines_and_anchors
-
-        num_of_pixels = (x_max_pix - x_min_pix)*(y_max_pix - y_min_pix)
-        pix_count = 0
-        for x in range(x_min_pix, x_max_pix):
-            for y in range(y_min_pix, y_max_pix):
-                pix_count = pix_count + 1
-                pixel = [x, y]
-                ContGS_cube[:, y, x] = pix_dict[str(pixel)]["ContGS"]
-                if "True" in self.bumps:
-                     ContLS_cube[:, y, x] = pix_dict[str(pixel)]["ContLS"]
-                if len(self.Pl_inds) > 0:
-                     ContPL_cube[:, y, x] = pix_dict[str(pixel)]["ContPL"]
-                if pix_count % 100 == 0:
-                    print("Continua " + str(pix_count*100/num_of_pixels) + "% completed")
-
-            pix_count = 0
-        
-        return ContGS_cube
-'''    
-cont = PAH.Continua(directory_cube=RebinnedCube.data, 
-                directory_cube_unc=None, 
-                directory_ipac = 'anchors_dust_all.ipac',
-                array_waves = RebinnedCube.wavelengths)
-RebinnedCube.cont_dust = cont.make_continua()
-'''

@@ -12,26 +12,36 @@ Modified exrensively on Sat Sep 27 10:27:00 2025 over spain
 CHANGES TO APPLY
 '''
 
+# updated spectra_stitcher to deal with pupd at boundary
+# simplified spectra_stitcher, will need to test on ppahs
+# removed old spline code
+# removed calculate R, moved to functions
+# simplified regions import
 
+# renaming methods: 
+# nan_replacer -> replace_nan
+# emission_line_remover -> mask_line
+# loading_function -> initiate_fits
+# loading_function_txt -> initiate_txt
+# fov_trim -> trim_fov
+# mbb_continuum -> calc_cont_mbb
+# spline_continuum -> calc_cont_spline
+# linear_continuum -> calc_cont_linear
+# pah_feature_integrator -> integrate
+# pah_properties -> calc_pah_properties
+# error_finder -> calc_error
+# spectra_stitcher -> stitch_data
+# rand_index_gen -> generate_random_index
 
-# apply to ppahs: 
-# new spline cont, change ipac to txt format, and anchor_points no longer a file loc
-
+# renaming variables:
 
 
 '''
 TO DO
 '''
 
-
-
-# rename static methods to initiate like in psf matching code
 # make error array a dictionary like integrals
-# rename the 'flux aligner' functions 
-# is fringe removal in here? if not reclass imports
 # investigate importing Unit and Unit as u
-
-
 
 '''
 IMPORTING MODULES
@@ -131,7 +141,7 @@ class DataCube:
         
         
     @staticmethod
-    def loading_function(fits_file): #XXX rename to initiate?
+    def initiate_fits(fits_file):
         """
         Static method used to generate a DataCube object from a fits file.
 
@@ -190,7 +200,7 @@ class DataCube:
     
     
     @staticmethod
-    def loading_function_txt(fits_file): 
+    def initiate_txt(fits_file): 
         """
         Static method used to generate a DataCube object from a txt file, intended for greg's 1d spectra 
         that contain wavelengths, flux, errors and segment number.
@@ -247,7 +257,7 @@ class DataCube:
         
         
         
-    def nan_replacer(self, nirspec=False):
+    def replace_nan(self, nirspec=False):
         """
         replaces the nans of a datacube, while leaving the edge nans intact. Nans are replaced with the 
         data that comes immediately before, assuming that data with a large gap of nans in the data has 
@@ -287,7 +297,7 @@ class DataCube:
         
         
         
-    def fov_trim(self, region_file):
+    def trim_fov(self, region_file):
         """
         replaces noisy edge pixels with nans, using a provided region file generated in ds9.
         does not trim original_data. 
@@ -301,10 +311,10 @@ class DataCube:
         data = self.data
         
         # turning region file into numpy array of same spatial shape as data
-        reg = regions.Regions.read(region_file, format='ds9')
+        region = regions.Regions.read(region_file, format='ds9')
         fits_cube = fits.open(self.fits_file)
         w = wcs.WCS(fits_cube[1].header).dropaxis(2)
-        regmask = reg[0].to_pixel(w).to_mask(mode='subpixels', subpixels=1).to_image(shape=self.shape)
+        regmask = region[0].to_pixel(w).to_mask(mode='subpixels', subpixels=1).to_image(shape=self.shape)
         
         # nan instead of 0 outside region
         regmask[regmask == 0] = np.nan
@@ -316,7 +326,7 @@ class DataCube:
 
 
     
-    def emission_line_remover(self, wave_list, tight=False):
+    def mask_line(self, wave_list, tight=False):
         """
         Wrapper for line_replacement, intended to remove isolated emission and
         absorption lines. Replaces data argument.
@@ -338,7 +348,7 @@ class DataCube:
 
         
         
-    def mbb_continuum(self, bb, bb_check, temp, amp, gamma):
+    def calc_cont_mbb(self, bb, bb_check, temp, amp, gamma):
         """
         generates a modified blackbody and performs a grid search to determing the best fit via least squares.
         Considers temperature and amplitude as seperate parameters to be specified, and allows for 
@@ -444,32 +454,7 @@ class DataCube:
         
         
         
-    def spline_continuum_old(self, anchor_point_ipac, mbb_cont_sub=False):
-        """
-        wrapper function for bethany's spline continuum code.
-
-        Parameters
-        ----------
-        anchor_point_ipac : string
-            file location of the ipac table containing the anchor points.
-       mbb_cont_sub : boolean 
-           subtract mbb_cont from data before calculating spline_cont
-        """
-        
-        wavelengths = self.wavelengths
-        data = np.copy(self.data)
-        
-        # subtract mbb_cont if enabled
-        if mbb_cont_sub == True:
-            data -= self.mbb_cont
-        
-        # calling the class and method
-        self.spline_cont = pahf.Continua(data, anchor_point_ipac, wavelengths).make_continua()
-        self.anchor_points = anchor_point_ipac
-        
-        
-        
-    def spline_continuum(self, ap_file_loc, mbb_cont_sub=False):
+    def calc_cont_spline(self, ap_file_loc, mbb_cont_sub=False):
         """
         wrapper function for spline continuum code.
 
@@ -510,7 +495,7 @@ class DataCube:
         
 
     
-    def linear_continuum(self, wave_list, tight=False, cont_sub=None):
+    def calc_cont_linear(self, wave_list, tight=False, cont_sub=None):
         """
         Fits linear functions to data to serve as a continuum. Depending on dimensions
         of wave_list, either isolates well-behaved features from the complexes
@@ -551,7 +536,7 @@ class DataCube:
     
     
     
-    def pah_feature_integrator(
+    def integrate( # XXX split up integration and max calc
             self, 
             feature_bounds, 
             feature_name=None,
@@ -655,73 +640,18 @@ class DataCube:
         
         
         
-    def pah_properties(self, ev):
+    def calc_pah_properties(self, ev, include_3p4=False):
         integral_33 = self.feature_integrals['3p3']
+        if include_3p4 == True:
+            integral_33 += self.feature_integrals['3p4']
+            
         integral_77 = self.feature_integrals['7p7']
         integral_112 = self.feature_integrals['11p2']
-        self.charge, self.size = pahf.pah_properties(integral_33, integral_77, integral_112, ev)
+        self.charge, self.size = pahf.calc_pah_properties(integral_33, integral_77, integral_112, ev)
 
 
     
-    def CalculateR(self, wavelength):
-        """
-        calculates the resolution of MIRI MRS based on the specified wavelength
-
-        Parameters
-        ----------
-        wavelength : float
-            wavelength R is calculated for.
-            
-        Returns
-        -------
-        R : float
-            the calculated resolution corresponding to the wavelength.
-        """     
-        
-        # 1A
-        if 4.9 <= wavelength <= 5.74:
-            coeff = [8.4645410e+03, -2.4806001e+03, 2.9600000e+02]
-        # 1B
-        elif 5.66 <= wavelength <= 6.63:
-            coeff = [1.3785873e+04, -3.8733003e+03, 3.6100000e+02]
-        # 1C
-        elif 6.53 <= wavelength <= 7.65 :
-            coeff = [9.0737793e+03, -2.0355999e+03, 1.7800000e+02]
-        # 2A
-        elif 7.51 <= wavelength <= 8.76:
-            coeff = [-1.3392804e+04, 3.8513999e+03, -2.1800000e+02]
-        # 2B
-        elif 8.67 <= wavelength <= 10.15:
-            coeff = [-3.0707996e+03, 1.0530000e+03, -4.0000000e+01]
-        # 2C
-        elif 10.01 <= wavelength <= 11.71:
-            coeff = [-1.4632270e+04, 3.0245999e+03, -1.2700000e+02]
-        # 3A
-        elif 11.55 <= wavelength <= 13.47:
-            coeff = [-6.9051500e+04, 1.1490000e+04, -4.5800000e+02]
-        # 3B
-        elif 13.29 <= wavelength <= 15.52:
-            coeff = [3.2627500e+03, -1.9200000e+02, 9.0000000e+00]
-        # 3C
-        elif 15.41 <= wavelength <= 18.02:
-            coeff = [-1.2368500e+04, 1.4890000e+03, -3.6000000e+01]
-        # 4A
-        elif 17.71 <= wavelength <= 20.94:
-            coeff = [-1.1510681e+04, 1.2088000e+03, -2.7000000e+01]
-        # 4B
-        elif 20.69 <= wavelength <= 24.44:
-            coeff = [-4.5252500e+03, 5.4800000e+02, -1.2000000e+01]
-        # 4C
-        elif 23.22 <= wavelength <= 28.1:
-            coeff = [-4.9578794e+03, 5.5819995e+02, -1.2000000e+01]
-                    
-        R = coeff[0] + coeff[1]*wavelength + coeff[2]*wavelength**2
-            
-        return R
-
-    
-    
-    def error_finder(self, feature_wavelength, feature_extent, error_wave):
+    def calc_error(self, feature_wavelength, feature_extent, error_wave):
         """
         calculates the error of assosiated integrals, based on their RMS.
 
@@ -758,7 +688,7 @@ class DataCube:
     
         # calculating RMS, turning into error
         rms = (np.var(rms_data, axis=0))**0.5
-        resolution = self.CalculateR(feature_wavelength)
+        resolution = pahf.calculate_miri_R(feature_wavelength)
         delta_wave = feature_wavelength/resolution
         num_points = (feature_extent[1] - feature_extent[0])/delta_wave
         error = rms*delta_wave*(num_points)**0.5
@@ -767,7 +697,7 @@ class DataCube:
     
 
     
-    def spectra_stitcher(self, DataCube2, offset=None, no_offset=False, nirspec_to_miri=False):
+    def stitch_data(self, DataCube2, offset=None, no_offset=False, boundary_pupd=False, nirspec_to_miri=False):
         """
         This function takes in 2 adjacent wavelength and image data arrays, presumably 
         from the same part of the image fov (field of view), so they correspond to 
@@ -786,6 +716,9 @@ class DataCube:
             uses specified offset instead of calculating one.
         no_offset : bool
             no offsets applied when True.
+        boundary_pupd : bool
+            some lines like at ch3b-3c are right at boundary, and if pupd present need to consider less area for overlap.
+            use furthest from overlap indices instead of nearest in this case. 
         nirspec_to_miri : bool
             additional considerations when stitching nirspec and miri spectra together.
         """    
@@ -796,107 +729,54 @@ class DataCube:
         data_a = self.data
         data_b = DataCube2.data
         
-        #check if wavelength interval is the same or different
-        check_a = np.round(wave_a[-1] - wave_a[-2], 4)
-        check_b = np.round(wave_b[1] - wave_b[0], 4)
+        # find where wavelength overlap begins and ends
+        overlap_begin = np.argmin(abs(wave_a - wave_b[0]))
+        overlap_end = np.argmin(abs(wave_b - wave_a[-1]))
         
-        def apply_offset(data1, data2, index1, index2, val):
-            offset1 = np.nanmean(data1[index1 - val : index1 + val], axis=0)
-            offset2 = np.nanmean(data2[index2 - val : index2 + val], axis=0)
-            
-            offset = offset1 - offset2
-            
-            return offset
-
-        if check_a == check_b:
+        split_wave = (wave_b[overlap_end] + wave_a[overlap_begin])/2
+        lower_ind = np.argmin(abs(wave_a - split_wave))
+        upper_ind = np.argmin(abs(wave_b - split_wave))
         
-            #check where the overlap is
-            overlap = np.argmin(abs(wave_a - wave_b[0]))
-            # overlap = np.where(np.round(wave_a, 2) == np.round(wave_b[0], 2))[0][0]
-    
-            #find how many entries are overlapped, subtract 1 for index
-            overlap_length = len(wave_a) -1 - overlap
-                    
-            #combine arrays such that the first half of one is used, and the second half
-            #of the other is used. This way data at the end of the wavelength range is avoided
-            
-            split_index = overlap_length/2
-            
-            #check if even or odd, do different things depending on which
-            if overlap_length%2 == 0: #even
-                lower_index = overlap + split_index
-                upper_index = split_index
-                #print(lower_index, upper_index)
-            else: #odd, so split_index is a number of the form int+0.5
-                lower_index = overlap + split_index + 0.5
-                upper_index = split_index - 0.5
-            
-            #make sure they are integers
-            lower_index = int(lower_index)
-            upper_index = int(upper_index)
-            
-        else:
-            #check where the overlap is, only works for wave_a
-            overlap_a = np.argmin(abs(wave_a - wave_b[0]))
-            # overlap_a = np.where(np.round(wave_a, 2) == np.round(wave_b[0], 2))[0][0]
-            
-            #find how many microns the overlap is
-            overlap_micron = wave_a[-1] - wave_a[overlap_a]
-            
-            #find how many entries of wave_a are overlapped, subtract 1 for index
-            overlap_length_a = len(wave_a) -1 - overlap_a
-            split_index_a = overlap_length_a/2
-            
-            #number of indices in wave_B over the wavelength range
-            overlap_length_b = int(overlap_micron/check_b)
-            split_index_b = overlap_length_b/2
-            
-            #check if even or odd, do different things depending on which
-            if overlap_length_a%2 == 0: #even
-                lower_index = overlap_a + split_index_a
-            else: #odd, so split_index is a number of the form int+0.5
-                lower_index = overlap_a + split_index_a + 0.5
-                
-            if overlap_length_b%2 == 0: #even
-                upper_index = split_index_b
-            else: #odd, so split_index is a number of the form int+0.5
-                upper_index = split_index_b - 0.5
-            
-            #make sure they are integers
-            lower_index = int(lower_index)
-            upper_index = int(upper_index)
-
-        wavelengths = np.hstack((wave_a[:lower_index], wave_b[upper_index:]))
+        # verify wavelengths only increase
+        while wave_b[upper_ind] <= wave_a[lower_ind]:
+            upper_ind += 1
+        
+        # stitching at lower_ind, upper_ind
+        wavelengths = np.hstack((wave_a[:lower_ind], wave_b[upper_ind:]))
+        
+        # calculating offsets
         if no_offset == True:
             offset = 0
-        elif nirspec_to_miri == True:
-            offset = apply_offset(data_a, data_b, lower_index, upper_index, 50)
         else:
-            offset = apply_offset(data_a, data_b, lower_index, upper_index, 10)
-                
+            if boundary_pupd == True:
+                # boundary vals only, meant for starting of wave_b for overlap
+                offset_a = np.nanmean(data_a[overlap_begin : overlap_begin + 10], axis=0)
+                offset_b = np.nanmean(data_b[:10], axis=0)
+            else:
+                offset_a = np.nanmean(data_a[overlap_begin:], axis=0)
+                offset_b = np.nanmean(data_b[:overlap_end], axis=0)
+            
+            offset = offset_a - offset_b
+    
+        # applying offset, stitching at lower_ind, upper_ind
         temp = data_b + offset
-        data = np.concatenate((data_a[:lower_index], temp[upper_index:]), axis=0)
+        data = np.concatenate((data_a[:lower_ind], temp[upper_ind:]), axis=0)
         
         # also stitch original_data using the same parameters including offset
         original_temp = DataCube2.original_data + offset
-        original_data = np.concatenate((self.original_data[:lower_index], original_temp[upper_index:]), axis=0)
+        original_data = np.concatenate((self.original_data[:lower_ind], original_temp[upper_ind:]), axis=0)
         
-        if wavelengths[lower_index-1] >= wavelengths[lower_index]:
-            wavelengths = np.delete(wavelengths, lower_index, axis=0)
-            data = np.delete(data, lower_index, axis=0)
-            original_data = np.delete(original_data, lower_index, axis=0)
-        
-        overlap = lower_index #(lower_index, upper_index)
+        overlap = lower_ind #(lower_index, upper_index)
         
         # add info to DataCube
         self.wavelengths = wavelengths
         self.original_data = original_data
         self.data = data
         self.overlap.append(overlap)
-
+        
         
 
-    def rand_index_gen(self, N, mask=None):
+    def generate_random_index(self, N, mask=None):
         """
         generates N random indices to use for plotting, without repeats.
 
@@ -950,11 +830,11 @@ class DataCube:
             array corresponding to region. 1 inside, and 0 outside region.
         """     
 
-        reg = regions.Regions.read(region_file, format='ds9')
+        region = regions.Regions.read(region_file, format='ds9')
         fits_cube = fits.open(self.fits_file)
         w = wcs.WCS(fits_cube[1].header).dropaxis(2)
 
-        regmask = reg[0].to_pixel(w).to_mask(mode='subpixels', subpixels=1).to_image(shape=self.shape)
+        regmask = region[0].to_pixel(w).to_mask(mode='subpixels', subpixels=1).to_image(shape=self.shape)
     
         return regmask
     
