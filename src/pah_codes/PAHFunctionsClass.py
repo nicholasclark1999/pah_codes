@@ -122,6 +122,7 @@ class DataCube:
                  wavelengths,
                  original_data,
                  data,
+                 error,
                  header,
                  instrument_header,
                  shape,
@@ -132,6 +133,7 @@ class DataCube:
         self.wavelengths = wavelengths
         self.original_data = original_data
         self.data = data
+        self.error = error
         self.header = header
         self.instrument_header = instrument_header
         self.shape = shape
@@ -162,6 +164,7 @@ class DataCube:
             instrument_header = hdul[0].header
 
             data = hdul[1].data
+            error = hdul[2].data
 
         original_data = np.copy(data)
         
@@ -195,7 +198,7 @@ class DataCube:
         where_are_NaNs = np.isnan(data[0]) 
         fov_mask[where_are_NaNs] = 0
         
-        return DataCube(fits_file, wavelengths, original_data, data, header, instrument_header, shape, overlap, fov_mask)
+        return DataCube(fits_file, wavelengths, original_data, data, error, header, instrument_header, shape, overlap, fov_mask)
     
     
     
@@ -309,6 +312,7 @@ class DataCube:
         """     
         
         data = self.data
+        error = self.error
         
         # turning region file into numpy array of same spatial shape as data
         region = regions.Regions.read(region_file, format='ds9')
@@ -321,8 +325,10 @@ class DataCube:
     
         # updating data 
         data = regmask[np.newaxis, :, :]*data
+        error = regmask[np.newaxis, :, :]*error
         
         self.data = data
+        self.error = error
 
 
     
@@ -887,8 +893,8 @@ class DataCube:
                 #note that y:y+N will have y+1,...,y+N, with length N, so want to subtract 1 from these to include y
                 
                 #taking mean over the pixels to be put in 1 bin
-                temp_data = np.mean(data[:, y : y + N, x : x + N], axis=(1,2))
-                temp_original_data = np.mean(original_data[:, y : y + N, x : x + N], axis=(1,2))
+                temp_data = np.nanmean(data[:, y : y + N, x : x + N], axis=(1,2))
+                temp_original_data = np.nanmean(original_data[:, y : y + N, x : x + N], axis=(1,2))
                 
                 #adding new pixel to array. y/N and x/N should always be integers, because the remainder was removed above.
                 rebinned_data[:, int((y - y_start)/N), int((x - x_start)/N)] = temp_data
@@ -959,15 +965,16 @@ class DataCube:
         with open(file_loc, 'wb') as file:
             pickle.dump(self.__dict__, file)
             
-            
+
             
     @staticmethod
     def load(file_loc):
         with open(file_loc, 'rb') as file:
             data = pickle.load(file)
             
-        class_inst = DataCube('_', '_', '_', '_', '_', '_', '_', '_', '_')
+        class_inst = DataCube('_', '_', '_', '_', '_', '_', '_', '_', '_', '_') # 10 items
         class_inst.__dict__ = data
         
         return class_inst
     
+

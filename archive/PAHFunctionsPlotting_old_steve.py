@@ -14,8 +14,6 @@ CHANGES TO APPLY
 
 # made ylim for multiplotting 1.2 if feature norm is self
 
-# XXX NOTE: this version has no y axis label in cont_plotter so all boxes are the same size! not applied in NGC6644 atm
-
 '''
 TO DO
 '''
@@ -23,6 +21,7 @@ TO DO
 
 
 # more robust units w.r.t. y axis with more accurate titles 
+# els mode to line removal
 
 
 
@@ -160,7 +159,6 @@ def cont_plotter(
         title_obj='',
         title_extras='', 
         y_units='MJy/sr',
-        no_y=False, 
         els_mode=False, 
         resolution=100, 
         save_loc='PDFtime/temp/',
@@ -288,14 +286,9 @@ def cont_plotter(
     ax.yaxis.set_minor_locator(AutoMinorLocator())
     ax.xaxis.set_minor_locator(AutoMinorLocator())
     plt.xlabel('Wavelength (micron)', fontsize=16)
+    plt.ylabel(f'Flux {y_units}', fontsize=16)
     plt.xticks(fontsize=14)
-    
-    # y axis logic
-    if no_y == True:
-        ax.set_yticklabels([])
-    else:
-        plt.yticks(fontsize=14)
-        plt.ylabel(f'Flux {y_units}', fontsize=16)
+    plt.yticks(fontsize=14)
     
     plt.xlim(wavelengths[0], wavelengths[-1])
     plt.ylim(lower_bound, upper_bound)
@@ -484,8 +477,7 @@ def multi_cont_plotter(
             lower_x_list.append(lower)
             upper_x_list.append(upper)
             
-            if els_mode == True: 
-                plt.plot(wavelengths, scale*original_data, color=colours[j], alpha=0.5)
+            plt.plot(wavelengths, scale*original_data, color=colours[j], alpha=0.5)
             plt.plot(wavelengths, scale*data, color=colours[j], label=DataCubeInst.name)
             plt.plot(wavelengths, scale*continuum, color=colours[j])
             
